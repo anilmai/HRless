@@ -1,0 +1,7 @@
+{
+  "name": "hrless",
+  "version": "0.1.0",
+  "description": "HRless button above the prompt: opens a local page showing every running Claude Code, Codex and agy agent and their subagents.",
+  "license": "MIT",
+  "repository": "https://github.com/anilmai/HRless"
+}

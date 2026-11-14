@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HRless</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%2322c55e'/%3E%3C/svg%3E">
+<style>
+:root{--bg:#f6f5f2;--panel:#fff;--line:#e4e1da;--text:#1c1b19;--dim:#6f6b63;--faint:#9d988e;
+--work:#16a34a;--idle:#d97706;--done:#a8a29e;--claude:#c2410c;--codex:#2563eb;--agy:#7c3aed;--chip:#f0eee9;
+--gbg:#fbfaf8;--glink:rgba(60,55,45,.22);--glabel:#5b5750}
+@media (prefers-color-scheme:dark){:root{--bg:#121211;--panel:#1b1a19;--line:#2c2a27;--text:#ecebe7;--dim:#a19d95;--faint:#6d6a64;
+--done:#57534e;--claude:#fb923c;--codex:#60a5fa;--agy:#a78bfa;--chip:#252422;
+--gbg:#161615;--glink:rgba(220,215,205,.16);--glabel:#b4afa6}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,"Segoe UI",sans-serif}
+header{position:sticky;top:0;z-index:3;background:var(--bg);border-bottom:1px solid var(--line)}
+.bar{max-width:1100px;margin:0 auto;padding:14px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+body.graph .bar{max-width:none}
+h1{font-size:17px;margin:0;letter-spacing:-.01em}
+.counts{display:flex;gap:14px;color:var(--dim);font-variant-numeric:tabular-nums}
+.counts b{color:var(--text);font-weight:600}
+.spacer{flex:1}
+.scope{font-size:12px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:2px 10px;text-decoration:none}
+.scope:hover{color:var(--text)}
+[hidden]{display:none!important}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:transparent;color:var(--dim);padding:5px 10px;font:inherit;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--chip);color:var(--text)}
+.icon{border:1px solid var(--line);background:transparent;color:var(--dim);border-radius:8px;width:34px;height:32px;display:grid;place-items:center;cursor:pointer;padding:0}
+.icon:hover{color:var(--text)}
+.icon[aria-pressed=true]{background:var(--chip);color:var(--text)}
+.icon svg{width:18px;height:18px}
+input[type=search]{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:8px;padding:5px 10px;font:inherit;width:180px}
+main{max-width:1100px;margin:0 auto;padding:16px}
+body.graph main{display:none}
+.empty{color:var(--dim);padding:48px 0;text-align:center}
+.agent{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:10px}
+.row{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start;padding:12px 14px;cursor:pointer}
+.dot{width:9px;height:9px;border-radius:50%;margin-top:6px;background:var(--done)}
+.working .dot{background:var(--work);box-shadow:0 0 0 0 var(--work);animation:pulse 1.6s infinite}
+.idle .dot{background:var(--idle)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--work) 50%,transparent)}100%{box-shadow:0 0 0 7px transparent}}
+@media (prefers-reduced-motion:reduce){.working .dot{animation:none}}
+.top{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;min-width:0}
+.title{font-weight:600;overflow-wrap:anywhere}
+.tag{font-size:12px;padding:0 7px;border-radius:5px;background:var(--chip);color:var(--dim);white-space:nowrap}
+.tag.claude{color:var(--claude)}.tag.codex{color:var(--codex)}.tag.agy{color:var(--agy)}
+.now{color:var(--dim);margin-top:2px;overflow-wrap:anywhere}
+.now .k{color:var(--faint)}
+.meta{color:var(--faint);font-size:12px;margin-top:2px;overflow-wrap:anywhere}
+.when{color:var(--faint);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right}
+.detail{display:none;border-top:1px solid var(--line);padding:10px 14px 12px 35px}
+.open>.detail{display:block}
+.prompt{background:var(--chip);border-radius:6px;padding:8px 10px;margin-bottom:8px;white-space:pre-wrap;overflow-wrap:anywhere}
+.ev{display:grid;grid-template-columns:62px 1fr;gap:8px;font-size:13px;padding:2px 0}
+.ev .kind{color:var(--faint)}
+.ev .txt{min-width:0;overflow-wrap:anywhere}
+.ev.tool .txt{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.kids{margin:0 14px 12px 35px;border-left:2px solid var(--line);padding-left:12px}
+.kids .agent{border-radius:8px;margin:8px 0 0}
+.kids .row{padding:8px 10px}
+.kids .detail{padding-left:31px}
+.more{color:var(--dim);font-size:12px;padding:6px 0 0}
+
+/* graph view */
+#graph{display:none;position:relative;height:calc(100vh - 61px);background:var(--gbg);overflow:hidden}
+body.graph #graph{display:block}
+#cv{position:absolute;inset:0;width:100%;height:100%;cursor:grab;touch-action:none}
+#cv.grabbing{cursor:grabbing}
+.legend{position:absolute;top:12px;right:12px;width:210px;max-height:calc(100% - 24px);overflow:auto;background:color-mix(in srgb,var(--panel) 88%,transparent);
+  border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12px;backdrop-filter:blur(6px)}
+.legend h2{font-size:11px;font-weight:600;color:var(--faint);margin:0 0 6px;letter-spacing:.02em}
+.legend h2+ul{margin-bottom:10px}
+.legend ul{list-style:none;margin:0;padding:0}
+.legend li{display:flex;align-items:center;gap:8px;padding:2px 4px;margin:0 -4px;border-radius:5px;cursor:default}
+.legend li:hover{background:var(--chip)}
+.legend .sw{width:10px;height:10px;border-radius:50%;flex:none}
+.legend .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.legend .n{color:var(--faint);font-variant-numeric:tabular-nums}
+.legend .ring{width:10px;height:10px;border-radius:50%;flex:none;border:2px solid var(--work)}
+.legend .faded{width:10px;height:10px;border-radius:50%;flex:none;background:var(--faint);opacity:.4}
+.legend .hint{color:var(--faint);margin-top:8px;line-height:1.4}
+.legend .reset{margin-top:8px;border:1px solid var(--line);background:transparent;color:var(--dim);border-radius:6px;padding:3px 8px;font:inherit;cursor:pointer}
+.info{position:absolute;left:12px;bottom:12px;width:min(420px,calc(100% - 24px));background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:none;max-height:45%;overflow:hidden auto}
+.info.show{display:block}
+.info .x{float:right;border:0;background:transparent;color:var(--faint);cursor:pointer;font-size:16px;line-height:1}
+.gempty{position:absolute;inset:0;display:grid;place-items:center;color:var(--dim);pointer-events:none}
+.gempty[hidden]{display:none}
+@media (max-width:640px){.row{grid-template-columns:auto 1fr}.when{grid-column:2;text-align:left}input[type=search]{width:100%}
+  .legend{width:150px;top:auto;bottom:12px;padding:8px 10px}.legend .hint{display:none}#graph{height:calc(100vh - 140px)}}
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <h1>HRless</h1>
+  <a class="scope" id="scope" hidden></a>
+  <div class="counts" id="counts"></div>
+  <div class="spacer"></div>
+  <input type="search" id="q" placeholder="Ara: proje, görev…" aria-label="Ara">
+  <div class="seg" id="tools" role="group" aria-label="Araç">
+    <button data-v="all" aria-pressed="true">Hepsi</button><button data-v="claude">Claude</button><button data-v="codex">Codex</button><button data-v="agy">agy</button>
+  </div>
+  <div class="seg" id="range" role="group" aria-label="Zaman">
+    <button data-v="0.5" aria-pressed="true">Aktif</button><button data-v="24">24 saat</button><button data-v="168">7 gün</button>
+  </div>
+  <button class="icon" id="viewBtn" aria-pressed="false" title="Grafik görünümü" aria-label="Grafik görünümü">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="5" r="2.4"/><circle cx="5.5" cy="18" r="2.4"/><circle cx="18.5" cy="18" r="2.4"/><circle cx="12" cy="18" r="1.6"/><path d="M10.8 7.1 6.7 15.9M13.2 7.1l4.1 8.8M12 7.4v9"/></svg>
+  </button>
+</div></header>
+<main id="list"><div class="empty">Yükleniyor…</div></main>
+<section id="graph" aria-label="Agent grafiği">
+  <canvas id="cv"></canvas>
+  <div class="gempty" id="gempty">Yükleniyor…</div>
+  <aside class="legend" id="legend"></aside>
+  <div class="info" id="info"></div>
+</section>
+<script>
+// Opened from a session's HRless button: ?session=<id> shows only that session's agent tree.
+const SESSION = new URLSearchParams(location.search).get('session')
+const VIEW_KEY = SESSION ? 'viewFocus' : 'view'
+const S = { tool: 'all', hours: '0.5', q: '', view: SESSION ? 'graph' : 'list', open: new Set(), data: null }
+try { const s = JSON.parse(localStorage.getItem('hrless') || '{}'); for (const k of ['tool', 'hours']) if (s[k]) S[k] = s[k]; if (s[VIEW_KEY]) S.view = s[VIEW_KEY] } catch {}
+const save = () => { try { const s = JSON.parse(localStorage.getItem('hrless') || '{}'); localStorage.setItem('hrless', JSON.stringify({ ...s, tool: S.tool, hours: S.hours, [VIEW_KEY]: S.view })) } catch {} }
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const STATE = { working: 'çalışıyor', idle: 'boşta', done: 'bitti' }
+const KIND = { prompt: 'istek', tool: 'araç', say: 'yanıt' }
+const TOOL = { claude: 'Claude', codex: 'Codex', agy: 'agy' }
+function ago(ms) {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000))
+  if (s < 60) return s + ' sn önce'; if (s < 3600) return Math.round(s / 60) + ' dk önce'
+  if (s < 86400) return Math.round(s / 3600) + ' sa önce'; return Math.round(s / 86400) + ' gün önce'
+}
+const short = p => (p || '').replace(/\\/g, '/').split('/').filter(Boolean).slice(-2).join('/')
+
+// ---------- list view ----------
+function card(a) {
+  const last = a.events[a.events.length - 1]
+  const open = S.open.has(a.id)
+  const live = a.children.filter(c => c.state === 'working').length
+  return `<div class="agent ${a.state} ${open ? 'open' : ''}" data-id="${esc(a.id)}">
+    <div class="row" role="button" tabindex="0" aria-expanded="${open}">
+      <span class="dot" title="${STATE[a.state]}"></span>
+      <div style="min-width:0">
+        <div class="top"><span class="title">${esc(a.title)}</span>
+          <span class="tag ${a.tool}">${TOOL[a.tool]} · ${esc(a.kind)}</span>
+          ${a.children.length ? `<span class="tag">${a.children.length} alt agent${live ? `, ${live} çalışıyor` : ''}</span>` : ''}</div>
+        ${last ? `<div class="now"><span class="k">${KIND[last.kind]}:</span> ${esc(last.text)}</div>` : ''}
+        <div class="meta">${esc(short(a.cwd))}${a.model ? ' · ' + esc(a.model) : ''}</div>
+      </div>
+      <div class="when">${STATE[a.state]}<br>${ago(a.mtime)}</div>
+    </div>
+    <div class="detail">${detail(a)}</div>
+    ${a.children.length ? `<div class="kids">${a.children.slice(0, open ? 99 : 4).map(card).join('')}
+      ${!open && a.children.length > 4 ? `<div class="more">+${a.children.length - 4} alt agent daha (açmak için tıkla)</div>` : ''}</div>` : ''}
+  </div>`
+}
+const detail = a => `${a.prompt ? `<div class="prompt">${esc(a.prompt)}</div>` : ''}
+  ${a.events.map(e => `<div class="ev ${e.kind}"><span class="kind">${KIND[e.kind]}</span><span class="txt">${esc(e.text)}</span></div>`).join('')}
+  <div class="meta">${esc(a.cwd)} · ${esc(a.id)}</div>`
+const text = a => [a.title, a.cwd, a.prompt, a.kind, ...a.events.map(e => e.text), ...a.children.map(text)].join(' ').toLowerCase()
+const visible = () => S.data.agents.filter(a => (S.tool === 'all' || a.tool === S.tool) && (!S.q || text(a).includes(S.q)))
+
+function render() {
+  if (!S.data) return
+  const all = S.data.agents
+  const count = st => { let n = 0; const w = a => { if (a.state === st) n++; a.children.forEach(w) }; all.forEach(w); return n }
+  document.getElementById('counts').innerHTML = `<span><b>${count('working')}</b> çalışıyor</span><span><b>${count('idle')}</b> boşta</span><span><b>${SESSION ? count('working') + count('idle') + count('done') : all.length}</b> ${SESSION ? 'agent' : 'oturum'}</span>`
+  const list = visible()
+  if (S.view === 'graph') return Graph.sync(list)
+  document.getElementById('list').innerHTML = list.length ? list.map(card).join('')
+    : `<div class="empty">${S.hours === '0.5' ? 'Son 30 dakikada çalışan agent yok. “24 saat” ile geçmişe bak.' : 'Bu aralıkta agent yok.'}</div>`
+}
+
+// ---------- graph view ----------
+// Each agent is a ball; an orchestrator sits on top and the agents it started hang below it, tier by tier.
+const Graph = (() => {
+  const cv = document.getElementById('cv'), ctx = cv.getContext('2d')
+  const legendEl = document.getElementById('legend'), infoEl = document.getElementById('info'), emptyEl = document.getElementById('gempty')
+  const FIXED = { 'claude:session': '#f97316', 'codex:thread': '#3b82f6', 'agy:conversation': '#a855f7', 'codex:guardian': '#64748b' }
+  const PAL = ['#22c55e', '#eab308', '#ec4899', '#14b8a6', '#ef4444', '#84cc16', '#06b6d4', '#f43f5e', '#6366f1', '#f59e0b', '#10b981', '#0ea5e9', '#d946ef']
+  const NAMES = { 'claude:session': 'Claude oturumu', 'codex:thread': 'Codex thread', 'agy:conversation': 'agy konuşması', 'codex:guardian': 'Codex guardian' }
+  const cat = a => `${a.tool}:${a.kind}`
+  const catName = k => NAMES[k] || `${TOOL[k.split(':')[0]]} · ${k.split(':').slice(1).join(':')}`
+  const hash = s => { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h }
+  const color = k => FIXED[k] || PAL[hash(k) % PAL.length]
+  const TIER = 110, LEAF = 44, ROOT_W = 250, ROW_GAP = 90
+
+  const nodes = new Map()
+  let links = [], roots = [], W = 0, H = 0, dpr = 1
+  let cam = { x: 0, y: 0, k: 1 }, fitted = false, hover = null, sel = null, hlCat = null
+  let drag = null, active = false
+
+  function resize() {
+    const r = cv.getBoundingClientRect(); dpr = window.devicePixelRatio || 1
+    W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr
+  }
+  function sync(list) {
+    const seen = new Set(); links = []; roots = []
+    const walk = (a, parent, depth) => {
+      seen.add(a.id)
+      let n = nodes.get(a.id)
+      if (!n) {
+        n = { id: a.id, x: parent ? parent.x : 0, y: parent ? parent.y : 0, tx: 0, ty: 0, fresh: !parent }
+        nodes.set(a.id, n)
+      }
+      Object.assign(n, { a, depth, parent, kids: a.children.length, k: cat(a), children: [] })
+      if (!parent) roots.push(n); else { parent.children.push(n); links.push([parent, n]) }
+      a.children.forEach(c => walk(c, n, depth + 1))
+    }
+    list.forEach(a => walk(a, null, 0))
+    for (const id of [...nodes.keys()]) if (!seen.has(id)) nodes.delete(id)
+    layout()
+    if (sel && !nodes.has(sel.id)) closeInfo()
+    if (sel) showInfo(sel)
+    legend()
+    emptyEl.hidden = nodes.size > 0
+    emptyEl.textContent = S.hours === '0.5' ? 'Son 30 dakikada çalışan agent yok. “24 saat” ile geçmişe bak.' : 'Bu aralıkta agent yok.'
+    if (!fitted && nodes.size) { for (const n of nodes.values()) { n.x = n.tx; n.y = n.ty } fit(); fitted = true }
+  }
+  const radius = n => n.depth === 0 ? Math.min(20, 11 + Math.sqrt(n.kids) * 2) : n.kids ? 9 : 6.5
+
+  // Each orchestrator and the agents under it form one tree: the orchestrator on top, each tier below it.
+  // Trees are packed left to right and wrap into rows, busiest first, so many sessions still fit one screen.
+  // A small tree (one session) gets room for every name; a big one packs its leaves tight.
+  const leafW = () => nodes.size <= 30 ? 170 : LEAF
+  const width = n => n.w = Math.max(n.depth === 0 ? ROOT_W : leafW(), n.children.reduce((s, c) => s + width(c), 0))
+  const height = n => n.children.length ? 1 + Math.max(...n.children.map(height)) : 0
+  function place(n, x, y) {
+    n.tx = x + n.w / 2; n.ty = y
+    let cx = x + (n.w - n.children.reduce((s, c) => s + c.w, 0)) / 2
+    for (const c of n.children) { place(c, cx, y + TIER); cx += c.w }
+  }
+  function layout() {
+    const order = [...roots].sort((a, b) => (b.kids > 0) - (a.kids > 0) || b.a.mtime - a.a.mtime)
+    order.forEach(width)
+    const total = order.reduce((s, r) => s + r.w, 0)
+    // Rows as wide as the screen's shape asks: wide on a monitor, two trees a row on a phone.
+    const aspect = W && H ? (W - (W > 640 ? 250 : 40)) / H : 2
+    const rowMax = Math.max(ROOT_W, Math.sqrt(total * 260 * aspect))
+    let x = 0, y = 0, rowH = 0
+    for (const r of order) {
+      if (x > 0 && x + r.w > rowMax) { x = 0; y += rowH + ROW_GAP; rowH = 0 }
+      place(r, x, y); x += r.w
+      rowH = Math.max(rowH, height(r) * TIER + 40)
+    }
+    for (const n of nodes.values()) if (n.fresh) { n.x = n.tx; n.y = n.ty - 30; n.fresh = false }
+  }
+  // Balls glide to their places, and a dragged one springs back when let go.
+  function step() {
+    for (const n of nodes.values()) {
+      if (drag && drag.node === n) continue
+      n.x += (n.tx - n.x) * .12; n.y += (n.ty - n.y) * .12
+    }
+  }
+  function fit() {
+    if (!nodes.size) return
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
+    for (const n of nodes.values()) { x0 = Math.min(x0, n.tx); x1 = Math.max(x1, n.tx); y0 = Math.min(y0, n.ty); y1 = Math.max(y1, n.ty) }
+    const room = W - (W > 640 ? 250 : 40)
+    cam.k = Math.max(.25, Math.min(nodes.size <= 30 ? 1.8 : 1.3, room / (x1 - x0 + 200), (H - 100) / (y1 - y0 + 100)))
+    cam.x = room / 2 - (x0 + x1) / 2 * cam.k
+    cam.y = (H - (y1 - y0) * cam.k) / 2 - y0 * cam.k
+  }
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim()
+  const toWorld = (sx, sy) => ({ x: (sx - cam.x) / cam.k, y: (sy - cam.y) / cam.k })
+  function pick(sx, sy) {
+    const p = toWorld(sx, sy); let best = null, bd = Infinity
+    for (const n of nodes.values()) { const d = Math.hypot(n.x - p.x, n.y - p.y); const r = radius(n) + 4 / cam.k; if (d < r && d < bd) { best = n; bd = d } }
+    return best
+  }
+  const near = n => {
+    const focus = hover || sel
+    if (hlCat) return n.k === hlCat
+    if (!focus) return true
+    return n === focus || n.parent === focus || focus.parent === n
+  }
+
+  function draw(t) {
+    step()
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H)
+    ctx.setTransform(dpr * cam.k, 0, 0, dpr * cam.k, dpr * cam.x, dpr * cam.y)
+    const dimAll = !!(hover || sel || hlCat)
+    const linkC = css('--glink'), labelC = css('--glabel'), workC = css('--work'), bgC = css('--gbg')
+    ctx.lineWidth = 1.2 / cam.k
+    for (const [a, b] of links) {
+      const on = near(a) && near(b)
+      ctx.strokeStyle = linkC; ctx.globalAlpha = dimAll && !on ? .25 : 1
+      ctx.beginPath(); ctx.moveTo(a.x, a.y)
+      const my = (a.y + b.y) / 2
+      ctx.bezierCurveTo(a.x, my, b.x, my, b.x, b.y); ctx.stroke()
+    }
+    for (const n of nodes.values()) {
+      const r = radius(n), on = near(n)
+      let ga = n.a.state === 'done' ? .45 : 1
+      if (dimAll && !on) ga *= .2
+      ctx.globalAlpha = ga
+      if (n.a.state === 'working') {
+        const p = (t / 1600) % 1
+        ctx.strokeStyle = workC; ctx.lineWidth = 2 / cam.k
+        ctx.globalAlpha = ga * (1 - p); ctx.beginPath(); ctx.arc(n.x, n.y, r + 3 + p * 10, 0, 7); ctx.stroke()
+        ctx.globalAlpha = ga; ctx.beginPath(); ctx.arc(n.x, n.y, r + 3, 0, 7); ctx.stroke()
+      }
+      // An opaque disc first, so the links never show through a faded ball.
+      ctx.save(); ctx.globalAlpha = 1; ctx.fillStyle = bgC; ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, 7); ctx.fill(); ctx.restore()
+      ctx.fillStyle = color(n.k); ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, 7); ctx.fill()
+      if (n === sel || n === hover) { ctx.strokeStyle = css('--text'); ctx.lineWidth = 1.5 / cam.k; ctx.beginPath(); ctx.arc(n.x, n.y, r + 1.5, 0, 7); ctx.stroke() }
+      // Like Obsidian: orchestrators always named, workers named when zoomed in or in focus.
+      const showLabel = n.depth === 0 || nodes.size <= 40 || n === hover || n === sel || cam.k > 1.6 || (dimAll && on && n.depth > 0 && (hover || sel))
+      if (showLabel) {
+        const fs = (n.depth === 0 ? 12.5 : 11) / Math.max(cam.k, .7)
+        ctx.font = `${n.depth === 0 ? 600 : 400} ${fs}px ui-sans-serif,system-ui,"Segoe UI",sans-serif`
+        ctx.fillStyle = labelC; ctx.textAlign = 'center'; ctx.textBaseline = 'top'
+        const max = n === hover || n === sel ? 60 : n.depth === 0 ? 24 : nodes.size <= 30 ? 26 : 18
+        let s = n.a.title; if (s.length > max) s = s.slice(0, max - 1) + '…'
+        ctx.fillText(s, n.x, n.y + r + 5 / cam.k)
+      }
+    }
+    ctx.globalAlpha = 1
+    if (active) requestAnimationFrame(draw)
+  }
+
+  function legend() {
+    const counts = new Map()
+    for (const n of nodes.values()) counts.set(n.k, (counts.get(n.k) || 0) + 1)
+    const order = [...counts.keys()].sort((a, b) => (b.endsWith(':session') || b.endsWith(':thread') || b.endsWith(':conversation')) - (a.endsWith(':session') || a.endsWith(':thread') || a.endsWith(':conversation')) || a.localeCompare(b))
+    legendEl.innerHTML = `<h2>AGENTLAR</h2><ul>${order.map(k => `<li data-k="${esc(k)}"><span class="sw" style="background:${color(k)}"></span><span class="nm" title="${esc(catName(k))}">${esc(catName(k))}</span><span class="n">${counts.get(k)}</span></li>`).join('') || '<li><span class="nm">—</span></li>'}</ul>
+      <h2>DURUM</h2><ul><li><span class="ring"></span><span class="nm">çalışıyor</span></li><li><span class="sw" style="background:var(--faint)"></span><span class="nm">boşta</span></li><li><span class="faded"></span><span class="nm">bitti</span></li></ul>
+      <div class="hint">Üstte orkestratör, altında başlattığı agentlar. Sürükle, tekerlekle yakınlaş, topa tıkla.</div>
+      <button class="reset" id="fitBtn">Ortala</button>`
+  }
+  legendEl.addEventListener('mouseover', e => { const li = e.target.closest('li[data-k]'); hlCat = li ? li.dataset.k : null })
+  legendEl.addEventListener('mouseleave', () => { hlCat = null })
+  legendEl.addEventListener('click', e => { if (e.target.id === 'fitBtn') fit() })
+
+  function showInfo(n) {
+    sel = n; const a = n.a
+    infoEl.innerHTML = `<button class="x" aria-label="Kapat">×</button>
+      <div class="top"><span class="title">${esc(a.title)}</span><span class="tag ${a.tool}">${TOOL[a.tool]} · ${esc(a.kind)}</span></div>
+      <div class="meta" style="margin-bottom:8px">${STATE[a.state]} · ${ago(a.mtime)}${a.model ? ' · ' + esc(a.model) : ''}${n.kids ? ` · ${n.kids} alt agent` : ''}</div>${detail(a)}`
+    infoEl.classList.add('show')
+  }
+  function closeInfo() { sel = null; infoEl.classList.remove('show') }
+  infoEl.addEventListener('click', e => { if (e.target.closest('.x')) closeInfo() })
+
+  cv.addEventListener('pointerdown', e => {
+    const n = pick(e.offsetX, e.offsetY)
+    drag = { node: n, sx: e.offsetX, sy: e.offsetY, cx: cam.x, cy: cam.y, moved: false }
+    cv.setPointerCapture(e.pointerId); cv.classList.add('grabbing')
+  })
+  cv.addEventListener('pointermove', e => {
+    if (!drag) { const h = pick(e.offsetX, e.offsetY); hover = h; cv.style.cursor = h ? 'pointer' : ''; return }
+    const dx = e.offsetX - drag.sx, dy = e.offsetY - drag.sy
+    if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true
+    if (drag.node) { const p = toWorld(e.offsetX, e.offsetY); drag.node.x = p.x; drag.node.y = p.y }
+    else { cam.x = drag.cx + dx; cam.y = drag.cy + dy }
+  })
+  cv.addEventListener('pointerup', () => {
+    if (drag && !drag.moved) drag.node ? showInfo(drag.node) : closeInfo()
+    drag = null; cv.classList.remove('grabbing')
+  })
+  cv.addEventListener('pointerleave', () => { hover = null })
+  cv.addEventListener('wheel', e => {
+    e.preventDefault()
+    const k = Math.max(.15, Math.min(4, cam.k * Math.exp(-e.deltaY * .0015)))
+    cam.x = e.offsetX - (e.offsetX - cam.x) * k / cam.k; cam.y = e.offsetY - (e.offsetY - cam.y) * k / cam.k; cam.k = k
+  }, { passive: false })
+  window.addEventListener('resize', () => { if (active) { resize(); layout(); fit() } })
+
+  return {
+    sync,
+    start() { active = true; resize(); fitted = false; if (S.data) sync(visible()); requestAnimationFrame(draw) },
+    stop() { active = false; hover = null },
+  }
+})()
+
+// ---------- controls ----------
+async function load() {
+  try {
+    const r = await fetch('/api/agents?hours=' + S.hours + (SESSION ? '&session=' + encodeURIComponent(SESSION) : ''), { cache: 'no-store' })
+    S.data = await r.json(); render()
+  } catch { document.getElementById('list').innerHTML = '<div class="empty">Sunucuya ulaşılamadı. Claude Code’daki HRless düğmesine yeniden bas.</div>' }
+}
+function seg(id, key) {
+  const el = document.getElementById(id)
+  const sync = () => el.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === S[key]))
+  el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S[key] = b.dataset.v; sync(); save(); key === 'hours' ? load() : render() })
+  sync()
+}
+function setView(v) {
+  S.view = v; save()
+  const g = v === 'graph'
+  document.body.classList.toggle('graph', g)
+  const btn = document.getElementById('viewBtn')
+  btn.setAttribute('aria-pressed', g); btn.title = btn.ariaLabel = g ? 'Liste görünümü' : 'Grafik görünümü'
+  g ? Graph.start() : (Graph.stop(), render())
+}
+seg('tools', 'tool'); seg('range', 'hours')
+document.getElementById('viewBtn').addEventListener('click', () => setView(S.view === 'graph' ? 'list' : 'graph'))
+document.getElementById('q').addEventListener('input', e => { S.q = e.target.value.toLowerCase().trim(); render() })
+const toggle = row => { const id = row.parentElement.dataset.id; S.open.has(id) ? S.open.delete(id) : S.open.add(id); render() }
+document.getElementById('list').addEventListener('click', e => { const row = e.target.closest('.row'); if (row) toggle(row) })
+document.getElementById('list').addEventListener('keydown', e => { const row = e.target.closest('.row'); if (row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle(row) } })
+setView(S.view)
+if (SESSION) {
+  // One session: the time range does not apply; a link leads to every session instead.
+  document.getElementById('range').hidden = true
+  const sc = document.getElementById('scope'); sc.hidden = false; sc.href = '/'; sc.textContent = 'Bu oturum · tümünü gör'
+}
+load(); setInterval(load, 3000)
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+{
+  "name": "hrless",
+  "owner": { "name": "anilmai" },
+  "plugins": [{ "name": "hrless", "source": "./" }]
+}
