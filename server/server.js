@@ -212,9 +212,17 @@ function codexFiles(since) {
   walk(path.join(CODEX, 'sessions'), 0)
   return files
 }
+// A parsed agy or Codex file is kept until the file changes: polling every 3 s then costs a stat, not a parse.
+const memoMap = new Map()
+function memo(key, ver, fn) {
+  const c = memoMap.get(key)
+  if (c && c.ver === ver) return c.v
+  const v = fn(); memoMap.set(key, { ver, v }); return v
+}
 function collectCodex(since) {
   const all = new Map()
   for (const [file, mtime] of codexFiles(since)) {
+    const b = memo(file, mtime, () => {
     const head = headJson(file)?.payload || {}
     const id = head.id || head.session_id || path.basename(file)
     const spawnInfo = head.source?.subagent?.thread_spawn
@@ -243,8 +251,10 @@ function collectCodex(since) {
       }
     }
     if (!a.title) a.title = clip(a.prompt, 80) || id.slice(0, 8)
-    a.prompt = clip(a.prompt, 400); a.events = a.events.slice(-8); a.state = state(mtime, a.done)
-    all.set(id, a)
+    a.prompt = clip(a.prompt, 400); a.events = a.events.slice(-8)
+    return a
+    })
+    all.set(b.id, { ...b, children: [], state: state(b.mtime, b.done) })
   }
   const roots = []
   for (const a of all.values()) {
@@ -283,6 +293,7 @@ function collectAgy(since) {
     const mtime = Math.max(...[f, f + '-wal'].map(x => stat(path.join(dir, x))?.mtimeMs || 0))
     if (mtime < since) continue
     const h = hist.get(id)
+    const b = memo(path.join(dir, f), mtime + ':' + (h?.prompts.length || 0), () => {
     const a = { cli: ['agy'], start: stat(path.join(dir, f))?.birthtimeMs || mtime, id, tool: 'agy', kind: 'conversation', title: '', cwd: h?.workspace || '', model: 'gemini', prompt: '', events: [], mtime, children: [], parent: null }
     if (sqlite) {
       let db
@@ -312,8 +323,10 @@ function collectAgy(since) {
     }
     if (h?.prompts.length) a.prompt = h.prompts[h.prompts.length - 1].text
     a.title = clip(h?.prompts[0]?.text || a.first || a.prompt, 80) || id.slice(0, 8)
-    a.prompt = clip(a.prompt, 400); a.events = a.events.slice(-8); a.state = state(mtime); delete a.first
-    out.push(a)
+    a.prompt = clip(a.prompt, 400); a.events = a.events.slice(-8); delete a.first
+    return a
+    })
+    out.push({ ...b, children: [], state: state(mtime) })
   }
   const byId = new Map(out.map(a => [a.id, a])); const roots = []
   for (const a of out) { const p = a.parent && byId.get(a.parent); if (p) p.children.push(a); else roots.push(a) }

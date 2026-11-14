@@ -1,53 +1,78 @@
 # HRless
 
-Claude Code'da yazı kutusunun üstüne bir **HRless** düğmesi ekler. Düğmeye basınca yerel bir sayfa açılır (http://127.0.0.1:4777) ve yalnız o oturumun agent ağacını gösterir: oturum en üstte, çağırdığı subagentlar altında, onların çağırdıkları bir alt kademede. Bir agent `agy -p` ya da `codex exec` çalıştırdıysa açılan agy/Codex konuşması da onun altında görünür.
+Adds an **HRless** button above the prompt box in Claude Code. Clicking it opens a local page (http://127.0.0.1:4777) that shows only that session's agent tree: the session at the top, the subagents it called below, and whatever those subagents called one level further down. If an agent ran `agy -p` or `codex exec`, the agy/Codex conversation it started appears under it too.
 
-## Kurulum
+## Install
 
-Terminalde bir Claude Code oturumunun yazı kutusuna:
+In the prompt box of a Claude Code session, in a terminal:
 
 ```
 /plugin install hrless --marketplace anilmai/HRless
 ```
 
-`Add marketplace?` sorusuna `y` deyin, ardından kapsamı seçin (Enter, kullanıcı kapsamı).
+Answer `y` to `Add marketplace?`, then choose the scope (Enter, user scope).
 
-Kabuktan:
+From a shell:
 
 ```bash
 claude plugin install hrless --marketplace anilmai/HRless
 ```
 
-Masaüstü uygulamasında (`/plugin` çalışmadığında): yazı kutusunun yanındaki + > Plugins > Add marketplace ile `anilmai/HRless` ekleyin, sonra Add plugin.
+In the desktop app (when `/plugin` does not work): next to the prompt box, click + > Plugins > Add marketplace and add `anilmai/HRless`, then Add plugin.
 
-Gereken: Node.js 22.5 veya üstü `PATH` içinde (agy konuşmaları `node:sqlite` ile okunur).
+Requires: Node.js 22.5 or newer on `PATH` (agy conversations are read with `node:sqlite`).
 
-## Görünümler
+## Views
 
-- **Liste:** her agent bir kart; durum, son yaptığı iş, proje klasörü, model. Karta tıklayınca son istek ve son 8 adım açılır.
-- **Grafik** (sağ üstteki ikon): her agent renkli bir top, orkestratör üstte, başlattığı agentlar kademe kademe altında. Sağdaki mini liste hangi rengin hangi agent türü olduğunu gösterir. Sürükleyerek kaydırın, tekerlekle yakınlaşın, topa tıklayınca ayrıntı açılır.
-- **Bu oturum · tümünü gör:** düğmeyle açılan sayfa yalnız o oturumu gösterir; bu bağlantı makinedeki bütün oturumlara geçer.
+- **List:** each agent is a card with its status, last piece of work, project folder and model. Click a card to open its last prompt and the last 8 steps.
+- **Graph** (icon at the top right): each agent is a coloured ball, with the orchestrator on top and the agents it started in tiers below. The mini list on the right shows which colour belongs to which agent type. Drag to pan, scroll to zoom, click a ball to open its details.
+- **Story** (box on the left of the graph): tells the running work as sentences: who orchestrates, which agents it assigned, and who is waiting for whom.
+- **This session · see all:** the page opened by the button shows only that session; this link switches to every session on the machine.
+- Agents nothing in HRless started (a script that ran agy forty times, for example) are grouped per tool into one ball once there are three or more of them.
 
-## Nereden okur
+## Custom agents
 
-| Araç | Dosyalar | Alt agentlar |
+The person icon in the toolbar opens **Your agents**. Add any agent HRless does not know yet, such as DeepSeek or Aider. Each agent has:
+
+- **Name:** shown on its cards, in the filters and on the graph.
+- **Colour:** the colour of its balls and tag.
+- **Command:** the command that starts it, for example `deepseek`. When a Claude agent runs that command from Bash or PowerShell, the new conversation hangs under that Claude agent.
+- **Session files:** a glob for the files the agent writes its conversations to, for example `~/.deepseek/sessions/**/*.jsonl`. JSON Lines files and JSON chat logs with role/content or OpenAI tool_calls are read. `~`, `*`, `?` and `**` work.
+
+Settings are saved to `~/.hrless/config.json` (set `HRLESS_CONFIG` to use another path). Example:
+
+```json
+{ "agents": [ { "name": "DeepSeek", "color": "#4d6bfe", "cli": ["deepseek"], "logs": "~/.deepseek/sessions/**/*.jsonl" } ] }
+```
+
+An agent with no session files can report what it is doing itself. The endpoint accepts requests from localhost only, and only when they carry no foreign Origin:
+
+```bash
+curl -X POST http://127.0.0.1:4777/api/report -H "content-type: application/json" -d '{"agent":"DeepSeek","id":"run-1","parent":"<claude session or agent id>","title":"Fix login","state":"working","text":"reading auth.ts"}'
+```
+
+Fields: `agent` (required), `id`, `parent`, `title`, `prompt`, `text`, `kind` (`tool`, `say` or `prompt`), `model`, `cwd`, `state` (`working` or `done`).
+
+## Where it reads from
+
+| Tool | Files | Subagents |
 | --- | --- | --- |
-| Claude Code (CLI ve masaüstü) | `~/.claude/projects/*/*.jsonl` | `<oturum>/subagents/agent-*.jsonl`, çağıran agente `toolUseId` ile bağlanır |
-| Codex | `~/.codex/sessions/**/rollout-*.jsonl` | `parent_thread_id` ile |
-| agy (Antigravity CLI) | `~/.gemini/antigravity-cli/conversations/*.db` | `parent_references` ile |
+| Claude Code (CLI and desktop) | `~/.claude/projects/*/*.jsonl` | `<session>/subagents/agent-*.jsonl`, linked to the calling agent by `toolUseId` |
+| Codex | `~/.codex/sessions/**/rollout-*.jsonl` | by `parent_thread_id` |
+| agy (Antigravity CLI) | `~/.gemini/antigravity-cli/conversations/*.db` | by `parent_references` |
 
-agy ve Codex konuşmaları, başladıkları anda süren `agy`/`codex` Bash çağrısının sahibi olan Claude agentının altına bağlanır (zamana göre eşleşme; aynı anda birden çok çağrı varsa nadiren yanlış dala düşebilir).
+agy and Codex conversations attach to the Claude agent that owned the `agy`/`codex` Bash call running when they started (matched by time; if several calls run at once, one can occasionally land on the wrong branch).
 
-Durum, dosyanın son yazılma zamanından çıkar: 90 saniye içinde **çalışıyor**, 30 dakika içinde **boşta**, daha eski **bitti**. Sayfa 3 saniyede bir yenilenir. Hiçbir şey dışarı gönderilmez; sunucu yalnız `127.0.0.1`'i dinler ve dosyaları yalnız okur.
+Status comes from the file's last write time: **working** within 90 seconds, **idle** within 30 minutes, and **done** when older. The page refreshes every 3 seconds. Nothing is sent anywhere: the server listens on `127.0.0.1` only and only reads files.
 
-## Elle çalıştırma
+## Running it by hand
 
 ```bash
 node server/server.js --open
 ```
 
-Port `HRLESS_PORT` ile değişir. `CLAUDE_CONFIG_DIR` ve `CODEX_HOME` dikkate alınır. Sunucu kodunu değiştirdikten sonra çalışan eski sunucuyu kapatın, yoksa düğme eskisini açar (sayfa, `index.html`, her istekte yeniden okunur).
+The port changes with `HRLESS_PORT`. `CLAUDE_CONFIG_DIR` and `CODEX_HOME` are respected. After you change the server code, stop the running server, or the button will open the old one. The page (`index.html`) is read again on every request.
 
-## Lisans
+## License
 
 MIT

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -129,24 +129,24 @@ dialog#settings h2{font-size:16px;margin:0 0 6px}
   <a class="scope" id="scope" hidden></a>
   <div class="counts" id="counts"></div>
   <div class="spacer"></div>
-  <input type="search" id="q" placeholder="Ara: proje, görev…" aria-label="Ara">
-  <div class="seg" id="tools" role="group" aria-label="Araç">
-    <button data-v="all" aria-pressed="true">Hepsi</button><button data-v="claude">Claude</button><button data-v="codex">Codex</button><button data-v="agy">agy</button>
+  <input type="search" id="q" placeholder="Search: project, task…" aria-label="Search">
+  <div class="seg" id="tools" role="group" aria-label="Tool">
+    <button data-v="all" aria-pressed="true">All</button><button data-v="claude">Claude</button><button data-v="codex">Codex</button><button data-v="agy">agy</button>
   </div>
-  <div class="seg" id="range" role="group" aria-label="Zaman">
-    <button data-v="0.5" aria-pressed="true">Aktif</button><button data-v="24">24 saat</button><button data-v="168">7 gün</button>
+  <div class="seg" id="range" role="group" aria-label="Time range">
+    <button data-v="0.5" aria-pressed="true">Active</button><button data-v="24">24 h</button><button data-v="168">7 d</button>
   </div>
   <button class="icon" id="setBtn" title="Your agents" aria-label="Your agents">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/><path d="M19 3v5M16.5 5.5h5"/></svg>
   </button>
-  <button class="icon" id="viewBtn" aria-pressed="false" title="Grafik görünümü" aria-label="Grafik görünümü">
+  <button class="icon" id="viewBtn" aria-pressed="false" title="Graph view" aria-label="Graph view">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="5" r="2.4"/><circle cx="5.5" cy="18" r="2.4"/><circle cx="18.5" cy="18" r="2.4"/><circle cx="12" cy="18" r="1.6"/><path d="M10.8 7.1 6.7 15.9M13.2 7.1l4.1 8.8M12 7.4v9"/></svg>
   </button>
 </div></header>
-<main id="list"><div class="empty">Yükleniyor…</div></main>
-<section id="graph" aria-label="Agent grafiği">
+<main id="list"><div class="empty">Loading…</div></main>
+<section id="graph" aria-label="Agent graph">
   <canvas id="cv"></canvas>
-  <div class="gempty" id="gempty">Yükleniyor…</div>
+  <div class="gempty" id="gempty">Loading…</div>
   <aside class="legend" id="legend"></aside>
   <aside class="story" id="story" aria-live="polite"></aside>
   <div class="info" id="info"></div>
@@ -172,8 +172,8 @@ const S = { tool: 'all', hours: '0.5', q: '', view: SESSION ? 'graph' : 'list', 
 try { const s = JSON.parse(localStorage.getItem('hrless') || '{}'); for (const k of ['tool', 'hours']) if (s[k]) S[k] = s[k]; if (s[VIEW_KEY]) S.view = s[VIEW_KEY] } catch {}
 const save = () => { try { const s = JSON.parse(localStorage.getItem('hrless') || '{}'); localStorage.setItem('hrless', JSON.stringify({ ...s, tool: S.tool, hours: S.hours, [VIEW_KEY]: S.view })) } catch {} }
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
-const STATE = { working: 'çalışıyor', idle: 'boşta', done: 'bitti' }
-const KIND = { prompt: 'istek', tool: 'araç', say: 'yanıt' }
+const STATE = { working: 'working', idle: 'idle', done: 'done' }
+const KIND = { prompt: 'prompt', tool: 'tool', say: 'reply' }
 const TOOL = { claude: 'Claude', codex: 'Codex', agy: 'agy' }
 // Names of custom agents come from the server (the user's config), built-ins from here.
 // A custom agent shows its own name once; a built-in shows tool and kind.
@@ -183,8 +183,8 @@ const tag = a => S.data?.sources?.[a.tool]?.color || !TOOL[a.tool]
 const toolName = t => S.data?.sources?.[t]?.name || TOOL[t] || t
 function ago(ms) {
   const s = Math.max(0, Math.round((Date.now() - ms) / 1000))
-  if (s < 60) return s + ' sn önce'; if (s < 3600) return Math.round(s / 60) + ' dk önce'
-  if (s < 86400) return Math.round(s / 3600) + ' sa önce'; return Math.round(s / 86400) + ' gün önce'
+  if (s < 60) return s + ' s ago'; if (s < 3600) return Math.round(s / 60) + ' m ago'
+  if (s < 86400) return Math.round(s / 3600) + ' h ago'; return Math.round(s / 86400) + ' d ago'
 }
 const short = p => (p || '').replace(/\\/g, '/').split('/').filter(Boolean).slice(-2).join('/')
 
@@ -199,7 +199,7 @@ function card(a) {
       <div style="min-width:0">
         <div class="top"><span class="title">${esc(a.title)}</span>
           ${tag(a)}
-          ${a.children.length ? `<span class="tag">${a.children.length} alt agent${live ? `, ${live} çalışıyor` : ''}</span>` : ''}</div>
+          ${a.children.length ? `<span class="tag">${a.children.length} subagent(s)${live ? `, ${live} working` : ''}</span>` : ''}</div>
         ${last ? `<div class="now"><span class="k">${KIND[last.kind]}:</span> ${esc(last.text)}</div>` : ''}
         <div class="meta">${esc(short(a.cwd))}${a.model ? ' · ' + esc(a.model) : ''}</div>
       </div>
@@ -207,7 +207,7 @@ function card(a) {
     </div>
     <div class="detail">${detail(a)}</div>
     ${a.children.length ? `<div class="kids">${a.children.slice(0, open ? 99 : 4).map(card).join('')}
-      ${!open && a.children.length > 4 ? `<div class="more">+${a.children.length - 4} alt agent daha (açmak için tıkla)</div>` : ''}</div>` : ''}
+      ${!open && a.children.length > 4 ? `<div class="more">+${a.children.length - 4} more subagent(s) (click to expand)</div>` : ''}</div>` : ''}
   </div>`
 }
 const detail = a => `${a.prompt ? `<div class="prompt">${esc(a.prompt)}</div>` : ''}
@@ -220,12 +220,12 @@ function render() {
   if (!S.data) return
   const all = S.data.agents
   const count = st => { let n = 0; const w = a => { if (a.state === st) n++; a.children.forEach(w) }; all.forEach(w); return n }
-  document.getElementById('counts').innerHTML = `<span><b>${count('working')}</b> çalışıyor</span><span><b>${count('idle')}</b> boşta</span><span><b>${SESSION ? count('working') + count('idle') + count('done') : all.length}</b> ${SESSION ? 'agent' : 'oturum'}</span>`
+  document.getElementById('counts').innerHTML = `<span><b>${count('working')}</b> working</span><span><b>${count('idle')}</b> idle</span><span><b>${SESSION ? count('working') + count('idle') + count('done') : all.length}</b> ${SESSION ? 'agent' : 'sessions'}</span>`
   syncTools()
   const list = visible()
   if (S.view === 'graph') return Graph.sync(list)
   document.getElementById('list').innerHTML = list.length ? list.map(card).join('')
-    : `<div class="empty">${S.hours === '0.5' ? 'Son 30 dakikada çalışan agent yok. “24 saat” ile geçmişe bak.' : 'Bu aralıkta agent yok.'}</div>`
+    : `<div class="empty">${S.hours === '0.5' ? 'No agent has worked in the last 30 minutes. Try “24 h” to look back.' : 'No agents in this time range.'}</div>`
 }
 
 // ---------- graph view ----------
@@ -235,7 +235,7 @@ const Graph = (() => {
   const legendEl = document.getElementById('legend'), infoEl = document.getElementById('info'), emptyEl = document.getElementById('gempty')
   const FIXED = { 'claude:session': '#f97316', 'codex:thread': '#3b82f6', 'agy:conversation': '#a855f7', 'codex:guardian': '#64748b' }
   const PAL = ['#22c55e', '#eab308', '#ec4899', '#14b8a6', '#ef4444', '#84cc16', '#06b6d4', '#f43f5e', '#6366f1', '#f59e0b', '#10b981', '#0ea5e9', '#d946ef']
-  const NAMES = { 'claude:session': 'Claude oturumu', 'codex:thread': 'Codex thread', 'agy:conversation': 'agy konuşması', 'codex:guardian': 'Codex guardian' }
+  const NAMES = { 'claude:session': 'Claude session', 'codex:thread': 'Codex thread', 'agy:conversation': 'agy conversation', 'codex:guardian': 'Codex guardian' }
   const MAIN = { claude: 'claude:session', codex: 'codex:thread', agy: 'agy:conversation' }
   const cat = a => `${a.tool}:${a.kind}`
   const toolOf = k => k.split(':')[0]
@@ -299,7 +299,7 @@ const Graph = (() => {
     legend()
     story(list)
     emptyEl.hidden = nodes.size > 0
-    emptyEl.textContent = S.hours === '0.5' ? 'Son 30 dakikada çalışan agent yok. “24 saat” ile geçmişe bak.' : 'Bu aralıkta agent yok.'
+    emptyEl.textContent = S.hours === '0.5' ? 'No agent has worked in the last 30 minutes. Try “24 h” to look back.' : 'No agents in this time range.'
     if (!fitted && nodes.size) { for (const n of nodes.values()) { n.x = n.tx; n.y = n.ty } fit(); fitted = true }
   }
   const radius = n => n.depth === 0 ? Math.min(20, 11 + Math.sqrt(n.kids) * 2) : n.kids ? 9 : 6.5
@@ -465,10 +465,10 @@ const Graph = (() => {
     const counts = new Map()
     for (const n of nodes.values()) counts.set(n.k, (counts.get(n.k) || 0) + 1)
     const order = [...counts.keys()].sort((a, b) => (b.endsWith(':session') || b.endsWith(':thread') || b.endsWith(':conversation')) - (a.endsWith(':session') || a.endsWith(':thread') || a.endsWith(':conversation')) || a.localeCompare(b))
-    legendEl.innerHTML = `<h2>AGENTLAR</h2><ul>${order.map(k => `<li data-k="${esc(k)}"><span class="sw" style="background:${color(k)}"></span><span class="nm" title="${esc(catName(k))}">${esc(catName(k))}</span><span class="n">${counts.get(k)}</span></li>`).join('') || '<li><span class="nm">—</span></li>'}</ul>
-      <h2>DURUM</h2><ul><li><span class="ring"></span><span class="nm">çalışıyor</span></li><li><span class="sw" style="background:var(--faint)"></span><span class="nm">boşta</span></li><li><span class="faded"></span><span class="nm">bitti</span></li></ul>
-      <div class="hint">Üstte orkestratör, altında başlattığı agentlar. Sürükle, tekerlekle yakınlaş, topa tıkla.</div>
-      <button class="reset" id="fitBtn">Ortala</button>`
+    legendEl.innerHTML = `<h2>AGENTS</h2><ul>${order.map(k => `<li data-k="${esc(k)}"><span class="sw" style="background:${color(k)}"></span><span class="nm" title="${esc(catName(k))}">${esc(catName(k))}</span><span class="n">${counts.get(k)}</span></li>`).join('') || '<li><span class="nm">—</span></li>'}</ul>
+      <h2>STATUS</h2><ul><li><span class="ring"></span><span class="nm">working</span></li><li><span class="sw" style="background:var(--faint)"></span><span class="nm">idle</span></li><li><span class="faded"></span><span class="nm">done</span></li></ul>
+      <div class="hint">Orchestrator on top, the agents it started below. Drag to pan, scroll to zoom, click a ball.</div>
+      <button class="reset" id="fitBtn">Fit</button>`
   }
   legendEl.addEventListener('mouseover', e => { const li = e.target.closest('li[data-k]'); hlCat = li ? li.dataset.k : null })
   legendEl.addEventListener('mouseleave', () => { hlCat = null })
@@ -476,9 +476,9 @@ const Graph = (() => {
 
   function showInfo(n) {
     sel = n; const a = n.a
-    infoEl.innerHTML = `<button class="x" aria-label="Kapat">×</button>
+    infoEl.innerHTML = `<button class="x" aria-label="Close">×</button>
       <div class="top"><span class="title">${esc(a.title)}</span>${tag(a)}</div>
-      <div class="meta" style="margin-bottom:8px">${STATE[a.state]} · ${ago(a.mtime)}${a.model ? ' · ' + esc(a.model) : ''}${n.kids ? ` · ${n.kids} alt agent` : ''}</div>${detail(a)}`
+      <div class="meta" style="margin-bottom:8px">${STATE[a.state]} · ${ago(a.mtime)}${a.model ? ' · ' + esc(a.model) : ''}${n.kids ? ` · ${n.kids} subagent(s)` : ''}</div>${detail(a)}`
     infoEl.classList.add('show')
   }
   function closeInfo() { sel = null; infoEl.classList.remove('show') }
@@ -516,11 +516,17 @@ const Graph = (() => {
 })()
 
 // ---------- controls ----------
+// One request at a time: a slow answer is never overtaken by the next poll.
+let loading = false
 async function load() {
+  if (loading) return
+  loading = true
+  setTimeout(() => { loading = false }, 30000)
   try {
     const r = await fetch('/api/agents?hours=' + S.hours + (SESSION ? '&session=' + encodeURIComponent(SESSION) : ''), { cache: 'no-store' })
     S.data = await r.json(); render()
-  } catch { document.getElementById('list').innerHTML = '<div class="empty">Sunucuya ulaşılamadı. Claude Code’daki HRless düğmesine yeniden bas.</div>' }
+  } catch { document.getElementById('list').innerHTML = '<div class="empty">Could not reach the server. Press the HRless button in Claude Code again.</div>' }
+  finally { loading = false }
 }
 // One filter button per custom agent the user added, after the built-in ones.
 let toolsKey = ''
@@ -591,7 +597,7 @@ function setView(v) {
   const g = v === 'graph'
   document.body.classList.toggle('graph', g)
   const btn = document.getElementById('viewBtn')
-  btn.setAttribute('aria-pressed', g); btn.title = btn.ariaLabel = g ? 'Liste görünümü' : 'Grafik görünümü'
+  btn.setAttribute('aria-pressed', g); btn.title = btn.ariaLabel = g ? 'List view' : 'Graph view'
   g ? Graph.start() : (Graph.stop(), render())
 }
 seg('tools', 'tool'); seg('range', 'hours')
@@ -604,7 +610,7 @@ setView(S.view)
 if (SESSION) {
   // One session: the time range does not apply; a link leads to every session instead.
   document.getElementById('range').hidden = true
-  const sc = document.getElementById('scope'); sc.hidden = false; sc.href = '/'; sc.textContent = 'Bu oturum · tümünü gör'
+  const sc = document.getElementById('scope'); sc.hidden = false; sc.href = '/'; sc.textContent = 'This session · see all'
 }
 load(); setInterval(load, 3000)
 </script>

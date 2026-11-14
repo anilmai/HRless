@@ -11,7 +11,7 @@ async function openDashboard($: EngineInterface) {
     ? ['powershell', '-NoProfile', '-Command', `Start-Process -WindowStyle Hidden -FilePath node -ArgumentList '"${server}"','--open','--session','${session}'`]
     : ['sh', '-c', `nohup node '${server}' --open --session '${session}' >/dev/null 2>&1 &`]
   const { exitCode, stderr } = await $.process.run(argv)
-  if (exitCode !== 0) $.ui.toast(`HRless açılamadı: ${stderr.trim().slice(0, 200) || 'node bulunamadı'}`)
+  if (exitCode !== 0) $.ui.toast(`Could not open HRless: ${stderr.trim().slice(0, 200) || 'node not found'}`)
 }
 
 export const register: Register = on => {
@@ -22,7 +22,7 @@ export const register: Register = on => {
     const { Box, Button } = $.ui.resolve(e)
     const mine = (
       <Box>
-        <Button key="hrless" label="HRless" onPress={() => openDashboard($).catch(() => $.ui.toast('HRless açılamadı'))} />
+        <Button key="hrless" label="HRless" onPress={() => openDashboard($).catch(() => $.ui.toast('Could not open HRless'))} />
       </Box>
     )
     return below ? <Box flexDirection="column">{mine}{below}</Box> : mine
