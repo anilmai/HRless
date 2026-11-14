@@ -43,7 +43,14 @@ function clean(raw) {
       logs: typeof a.logs === 'string' ? a.logs.trim().slice(0, 500) : '',
     })
   }
-  return { agents }
+  // Optional USD prices per 1M tokens, keyed by a part of the model id (see prices.js).
+  const prices = {}
+  for (const [k, p] of Object.entries(raw?.prices && typeof raw.prices === 'object' ? raw.prices : {}).slice(0, 100)) {
+    const num = v => (Number.isFinite(v) && v >= 0 && v < 10000 ? v : undefined)
+    if (/^[\w.:-]{2,80}$/.test(k) && num(p?.in) !== undefined && num(p?.out) !== undefined)
+      prices[k] = { in: p.in, out: p.out, cacheRead: num(p.cacheRead), cacheWrite: num(p.cacheWrite) }
+  }
+  return { agents, prices }
 }
 let cache = { mtime: -1, cfg: { agents: [] } }
 function loadConfig() {
@@ -56,9 +63,10 @@ function loadConfig() {
   return cache.cfg
 }
 function saveConfig(raw) {
-  const cfg = clean(raw)
+  // The settings panel sends agents only: prices written by hand in the file are kept.
+  const cfg = clean({ prices: loadConfig().prices, ...raw })
   fs.mkdirSync(path.dirname(CONFIG), { recursive: true })
-  const out = { agents: cfg.agents.map(({ key, ...a }) => a) }
+  const out = { agents: cfg.agents.map(({ key, ...a }) => a), ...(Object.keys(cfg.prices).length ? { prices: cfg.prices } : {}) }
   fs.writeFileSync(CONFIG, JSON.stringify(out, null, 2) + '\n')
   return cfg
 }
@@ -107,7 +115,11 @@ function record(a, r) {
   a.parent = a.parent || r.parent_id || r.parentId || r.parent_session_id || r.parentSessionId || null
   // OpenAI-style usage (prompt/completion) or Anthropic-style (input/output) on a reply.
   const us = r.usage || m.usage
-  if (us && typeof us === 'object') a.tokens += us.total_tokens ?? ((us.prompt_tokens || 0) + (us.completion_tokens || 0) + (us.input_tokens || 0) + (us.output_tokens || 0))
+  if (us && typeof us === 'object') {
+    a.use.in += (us.prompt_tokens || 0) + (us.input_tokens || 0)
+    a.use.out += (us.completion_tokens || 0) + (us.output_tokens || 0)
+    a.use.cr += us.cache_read_input_tokens || us.prompt_tokens_details?.cached_tokens || 0
+  }
   if (/complete|finished|done|exit|end/.test(String(r.status || r.type || r.event || '').toLowerCase())) a.done = true
   const calls = m.tool_calls || r.tool_calls || (role.includes('tool') && (m.name || r.tool) ? [{ name: m.name || r.tool, arguments: m.arguments || r.input }] : [])
   for (const c of Array.isArray(calls) ? calls : []) {
@@ -123,7 +135,7 @@ function record(a, r) {
   else a.events.push({ kind: 'say', text: clip(t) })
 }
 function readLog(file, st) {
-  const a = { title: '', cwd: '', model: '', prompt: '', first: '', events: [], parent: null, done: false, tokens: 0 }
+  const a = { title: '', cwd: '', model: '', prompt: '', first: '', events: [], parent: null, done: false, use: { in: 0, out: 0, cr: 0, cw: 0 } }
   try {
     const size = Math.min(st.size, 4 * 1024 * 1024)
     const fd = fs.openSync(file, 'r'); const buf = Buffer.alloc(size)
@@ -181,7 +193,7 @@ function collectCustom(since, state) {
       const id = path.basename(file).replace(/\.[^.]+$/, '')
       nodes.push({ id: `${ag.key}:${id}`, tool: ag.key, kind: ag.name, title: clip(a.title || a.first || a.prompt, 80) || id.slice(0, 12),
         cwd: a.cwd, model: a.model, prompt: clip(a.prompt, 400), events: a.events, mtime: st.mtimeMs, state: state(st.mtimeMs, a.done),
-        children: [], tokens: a.tokens, start: st.birthtimeMs || st.mtimeMs, cli: ag.cli, _parent: a.parent ? `${ag.key}:${a.parent}` : null })
+        children: [], use: a.use.in + a.use.out ? a.use : null, start: st.birthtimeMs || st.mtimeMs, cli: ag.cli, _parent: a.parent ? `${ag.key}:${a.parent}` : null })
     }
   }
   for (const r of reports.values()) {

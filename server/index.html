@@ -136,7 +136,11 @@ body.graph #graph{display:block}
 .tokens li:last-child{border-bottom:0;padding-bottom:0}
 .tokens .sw{width:8px;height:8px;border-radius:50%}
 .tokens .nm{font-weight:600}
-.tokens .v{font-family:var(--num);font-variant-numeric:tabular-nums;color:var(--text)}
+.tokens .v{font-family:var(--num);font-variant-numeric:tabular-nums;color:var(--text);text-align:right}
+.tokens .v .d{display:block;font-size:12px;color:var(--dim);font-weight:500}
+.tokens .na{color:var(--faint);font-weight:400}
+.tokens sup{color:var(--faint);font-size:10px;margin-left:1px}
+.tokens .kpi .usd{font-size:20px;font-weight:500;color:#d97757}
 /* Token bar: solid Claude orange for the share, then a halftone dot field that thins out to the right. */
 .tokens .meter{--c:#d97757;grid-column:2/4;position:relative;height:16px;border-radius:3px;overflow:hidden;margin-top:2px}
 .tokens .meter::before{content:'';position:absolute;inset:0;background:radial-gradient(circle,var(--c) 1.15px,transparent 1.4px) 0 0/4px 4px;
@@ -246,6 +250,7 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 const STATE = { working: 'working', idle: 'idle', done: 'done' }
 const KIND = { prompt: 'prompt', tool: 'tool', say: 'reply' }
 const TOOL = { claude: 'Claude', codex: 'Codex', agy: 'agy' }
+const fmtUsd = v => v >= 100 ? '$' + Math.round(v).toLocaleString('en-US') : v >= 1 ? '$' + v.toFixed(2) : v >= 0.01 ? '$' + v.toFixed(2) : v > 0 ? '<$0.01' : '$0'
 const fmtTok = n => n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n)
 // An agent at work, or with one at work somewhere below it.
 const busyTree = a => a.state === 'working' || a.children.some(busyTree)
@@ -277,7 +282,7 @@ function card(a) {
         ${last ? `<div class="now"><span class="k">${KIND[last.kind]}:</span> ${esc(last.text)}</div>` : ''}
         <div class="meta">${esc(short(a.cwd))}${a.model ? ' · ' + esc(a.model) : ''}</div>
       </div>
-      <div class="when">${STATE[a.state]} · ${ago(a.mtime)}${a.tokens ? `<span class="tk">${fmtTok(a.tokens)} tokens</span>` : ''}</div>
+      <div class="when">${STATE[a.state]} · ${ago(a.mtime)}${a.tokens ? `<span class="tk">${fmtTok(a.tokens)} tokens${a.cost != null ? ' · ' + fmtUsd(a.cost) : ''}</span>` : ''}</div>
     </div>
     <div class="detail">${detail(a)}</div>
     ${a.children.length ? `<div class="kids">${a.children.slice(0, open ? 99 : 4).map(card).join('')}
@@ -543,18 +548,28 @@ const Graph = (() => {
 
   // Tokens every agent here burned (input + output + cache reads and writes, as Ponytail counts them),
   // hidden and finished ones included: All first, then each tool, the hungriest on top.
+  // Dollars: what the tokens cost at each model's API price (the server prices them; null = no known price).
   function tokens(list) {
     const el = document.getElementById('tokens')
-    const by = new Map(); let total = 0, n = 0
-    const walk = a => { if (a.kind !== 'group') { const t = a.tokens || 0; total += t; if (t) n++; by.set(a.tool, (by.get(a.tool) || 0) + t) } a.children.forEach(walk) }
+    const by = new Map(); let total = 0, n = 0, usd = 0, unpriced = 0
+    const walk = a => {
+      if (a.kind !== 'group') {
+        const t = a.tokens || 0, row = by.get(a.tool) || { t: 0, usd: 0, unpriced: 0 }
+        total += t; if (t) n++; row.t += t
+        if (a.cost == null) { row.unpriced += t; unpriced += t } else { row.usd += a.cost; usd += a.cost }
+        by.set(a.tool, row)
+      }
+      a.children.forEach(walk)
+    }
     list.forEach(walk)
-    const rows = [...by].filter(([, v]) => v > 0).sort((x, y) => y[1] - x[1])
+    const rows = [...by].filter(([, v]) => v.t > 0).sort((x, y) => y[1].t - x[1].t)
+    const money = (r) => r.t && r.unpriced === r.t ? '<span class="na" title="No price known for this model">no price</span>' : fmtUsd(r.usd) + (r.unpriced ? '<sup title="Some of these tokens have no known price">*</sup>' : '')
     el.innerHTML = `<div class="cap"><svg class="ic" aria-hidden="true"><use href="#i-tokens"/></svg>Tokens burned</div>
-      <div class="kpi"><span class="num">${fmtTok(total)}</span><span>All · ${n} agent${n === 1 ? '' : 's'}</span></div>
+      <div class="kpi"><span class="num">${fmtTok(total)}</span><span class="usd num">${fmtUsd(usd)}${unpriced ? '<sup>*</sup>' : ''}</span><span>All · ${n} agent${n === 1 ? '' : 's'}</span></div>
       <ol>${rows.map(([t, v]) => { const c = color(MAIN[t] || t + ':x')
-        return `<li><span class="sw" style="background:${c}"></span><span class="nm">${esc(toolName(t))}</span><span class="v">${fmtTok(v)}</span>
-          <span class="meter" role="img" aria-label="${esc(toolName(t))}: ${Math.round(v / total * 100)}% of all tokens"><i style="width:${Math.max(.6, v / (total || 1) * 100)}%"></i></span></li>` }).join('') || '<li><span></span><span class="nm">No usage yet</span><span></span></li>'}</ol>
-      <p class="note">Input + output + cache, as the tools record it. agy is read from its own files and is close, not exact.</p>`
+        return `<li><span class="sw" style="background:${c}"></span><span class="nm">${esc(toolName(t))}</span><span class="v">${fmtTok(v.t)}<span class="d">${money(v)}</span></span>
+          <span class="meter" role="img" aria-label="${esc(toolName(t))}: ${Math.round(v.t / total * 100)}% of all tokens"><i style="width:${Math.max(.6, v.t / (total || 1) * 100)}%"></i></span></li>` }).join('') || '<li><span></span><span class="nm">No usage yet</span><span></span></li>'}</ol>
+      <p class="note">Dollars are API list prices (cache reads included), not what a subscription bills.${unpriced ? ` * ${fmtTok(unpriced)} tokens have no known price; add one under "prices" in ~/.hrless/config.json.` : ''} agy's count is read from its own files and is close, not exact.</p>`
   }
 
   function legend() {

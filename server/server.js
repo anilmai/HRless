@@ -9,6 +9,9 @@ const path = require('node:path')
 const os = require('node:os')
 const { spawn } = require('node:child_process')
 const custom = require('./custom')
+const prices = require('./prices')
+// Adds token usages ({ in, out, cr, cw }), skipping the empty ones.
+const sumUse = list => list.reduce((s, u) => u ? { in: s.in + u.in, out: s.out + u.out, cr: s.cr + u.cr, cw: s.cw + u.cw } : s, { in: 0, out: 0, cr: 0, cw: 0 })
 
 const PORT = Number(process.env.HRLESS_PORT || 4777)
 const URL_ = `http://127.0.0.1:${PORT}`
@@ -116,7 +119,7 @@ function claudeRecord(d, r) {
     if (m.model && m.model !== '<synthetic>') d.model = m.model
     // One reply can be written over several lines, each carrying the same usage: keyed by message id.
     const u = m.usage
-    if (u && m.id) d.usage.set(m.id, (u.input_tokens || 0) + (u.output_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0))
+    if (u && m.id) d.usage.set(m.id, { in: u.input_tokens || 0, out: u.output_tokens || 0, cr: u.cache_read_input_tokens || 0, cw: u.cache_creation_input_tokens || 0 })
     for (const b of m.content || []) {
       if (b.type === 'text' && b.text.trim()) push({ kind: 'say', text: clip(b.text) })
       if (b.type !== 'tool_use') continue
@@ -133,7 +136,7 @@ function claudeRecord(d, r) {
 function claudeNode(id, kind, d, title, mtime, done) {
   return { id, tool: 'claude', kind, title: title || clip(d.prompt, 80) || id.slice(0, 8), cwd: d.cwd, model: d.model,
     prompt: clip(d.prompt, 400), events: d.events, mtime, state: state(mtime, done), children: [], start: d.start, _d: d,
-    tokens: [...d.usage.values()].reduce((x, y) => x + y, 0) }
+    use: sumUse([...d.usage.values()]) }
 }
 // One session as a tree: subagents hang under whoever called them (a subagent can call its own).
 function claudeSession(dir, id, since) {
@@ -210,6 +213,10 @@ function settle(n) {
   for (const c of n.children) settle(c)
   n.children.sort((x, y) => y.mtime - x.mtime)
   n.mtime = Math.max(n.mtime, ...n.children.map(c => c.mtime))
+  // Tokens as Ponytail counts them (all four kinds), and their price at API rates (null: unknown).
+  if (n.use) n.tokens = n.use.in + n.use.out + n.use.cr + n.use.cw
+  else n.tokens = n.tokens || 0
+  n.cost = n.use ? prices.cost(n.model, n.use, custom.loadConfig().prices) : null
   delete n._d; delete n._call; delete n.start; delete n.cli; delete n._parent
   return n
 }
@@ -270,7 +277,9 @@ function collectCodex(since) {
       if (p.thread_settings?.model) a.model = p.thread_settings.model
       if (r.type === 'event_msg' && p.type === 'task_started') a.done = false
       // Codex reports a running total for the thread.
-      if (r.type === 'event_msg' && p.type === 'token_count' && p.info?.total_token_usage) a.tokens = p.info.total_token_usage.total_tokens || 0
+      // input_tokens includes the cached part; output_tokens includes reasoning.
+      const tu = r.type === 'event_msg' && p.type === 'token_count' && p.info?.total_token_usage
+      if (tu) a.use = { in: (tu.input_tokens || 0) - (tu.cached_input_tokens || 0), out: tu.output_tokens || 0, cr: tu.cached_input_tokens || 0, cw: tu.cache_write_input_tokens || 0 }
       if (r.type === 'event_msg' && (p.type === 'task_complete' || p.type === 'turn_aborted')) a.done = true
       if (r.type !== 'response_item') continue
       if (p.type === 'message' && p.role === 'user') {
@@ -342,10 +351,10 @@ function genTokens(buf) {
   try {
     const one = pbFields(Buffer.from(buf || [])).get(1)
     const use = one && typeof one !== 'number' && pbFields(one).get(4)
-    if (!use || typeof use === 'number') return 0
+    if (!use || typeof use === 'number') return null
     const u = pbFields(use), n = k => typeof u.get(k) === 'number' ? u.get(k) : 0
-    return n(1) + n(2) + n(3) + n(5)
-  } catch { return 0 }
+    return { in: n(1), out: n(2) + n(3), cr: n(5), cw: 0 }
+  } catch { return null }
 }
 function agyHistory() {
   const map = new Map()
@@ -378,8 +387,7 @@ function collectAgy(since) {
         if (ws && !a.cwd) a.cwd = decodeURIComponent(ws[1])
         const parentRef = db.prepare('select data from parent_references limit 1').get()
         if (parentRef) { const m = runs(parentRef.data).join(' ').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/); if (m && m[0] !== id) a.parent = m[0] }
-        a.tokens = 0
-        for (const g of db.prepare('select data from gen_metadata').all()) a.tokens += genTokens(g.data)
+        a.use = sumUse(db.prepare('select data from gen_metadata').all().map(g => genTokens(g.data)))
         const steps = db.prepare('select idx, step_type, step_payload, metadata from steps order by idx desc limit 40').all().reverse()
         for (const s of steps) {
           const t = stepTime(s.metadata); if (t > (a.real || 0)) a.real = t
