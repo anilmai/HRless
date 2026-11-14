@@ -505,7 +505,9 @@ const Graph = (() => {
     if ((r = m.match(/deepseek-?([\w.]*)/i))) return `DeepSeek ${r[1]}`.trim()
     return m && m !== 'gemini' ? m : toolName(a.tool)
   }
-  const label = a => a.tool === 'claude' && a.kind !== 'session' && a.kind !== 'subagent' ? `${who(a)} · ${a.kind}` : who(a)
+  // A typed Claude subagent (gemini-hydrogen, sol-worker…) is named by its job; the model it runs on
+  // is often just the relay (a Haiku handing work to agy or Codex), so it goes in brackets.
+  const label = a => a.tool === 'claude' && a.kind !== 'session' && a.kind !== 'subagent' ? `${a.kind} (${who(a)})` : who(a)
   const STATE_EN = { working: 'working', idle: 'idle', done: 'done' }
   const all = a => a.children.flatMap(c => [c, ...all(c)])
   // Only agents at work are listed (and drawn): a finished one leaves the picture, its tokens stay counted.

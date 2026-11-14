@@ -178,19 +178,26 @@ function adoptCli(trees, externals) {
   for (const t of trees) for (const n of t.all) for (const c of n._d.bash) calls.push([n, c])
   const res = new Map()
   const left = []
-  for (const x of externals) {
+  // One call starts one agent: once a call has adopted an agent it is taken, so twenty agents
+  // started in the same second land under their twenty callers, not all under the first.
+  const used = new Set()
+  for (const x of [...externals].sort((a, b) => a.start - b.start)) {
     if (!x.cli?.length) { left.push(x); continue }
     const key = x.cli.join('|'); if (!res.has(key)) res.set(key, cliRe(x.cli))
     const re = res.get(key)
+    // The agent's own prompt quoted in the command line is the surest match.
+    const said = (x.prompt || '').slice(0, 40).trim()
     let best = null, bestCall = null, gap = Infinity
     for (const [n, c] of calls) {
-      if (!re.test(c.cmd)) continue
+      if (used.has(c) || !re.test(c.cmd)) continue
       // A call with no result yet is open only as long as its caller is still writing.
       const end = Math.max(c.end || n._d.mtime, c.start + 30000)
       if (x.start >= c.start - 3000 && x.start <= end + 3000) {
-        const g = Math.abs(x.start - c.start); if (g < gap) { best = n; bestCall = c; gap = g }
+        const g = said.length > 6 && c.cmd.includes(said) ? -1 : Math.abs(x.start - c.start)
+        if (g < gap) { best = n; bestCall = c; gap = g }
       }
     }
+    if (bestCall) used.add(bestCall)
     // The command names the model (`agy -p ... --model gemini-3.8-flash-high`) when the agent's own files do not.
     const mm = bestCall && bestCall.cmd.match(/(?:--model|-m)[\s=]+["']?([\w.:\-]+)/)
     if (mm && (!x.model || x.model === 'gemini')) x.model = mm[1]
@@ -378,7 +385,8 @@ function collectAgy(since) {
           const t = stepTime(s.metadata); if (t > (a.real || 0)) a.real = t
           const r = runs(s.step_payload)
           // The typed prompt is the first readable run with a space; the long ones after it are injected instructions.
-          if (s.step_type === 14) { const t = (r.find(x => /\s/.test(x)) || '').replace(/^\/\w+\s+/, ''); if (t) { if (!a.first) a.first = t; a.prompt = t; a.events.push({ kind: 'prompt', text: clip(t) }) } }
+          // The run starts with a protobuf length byte that may read as a character, then a mode command (`/plan`).
+          if (s.step_type === 14) { const t = (r.find(x => /\s/.test(x)) || '').replace(/^[^\w/(]*(\/\w+\s+)?/, ''); if (t) { if (!a.first) a.first = t; a.prompt = t; a.events.push({ kind: 'prompt', text: clip(t) }) } }
           else if (s.step_type === 132) {
             const i = r.findIndex(x => /^call_\d+/.test(x)); const name = i >= 0 ? r[i + 1] : 'tool'
             const args = (r.find(x => x.includes('{"')) || '').replace(/^[^{]*/, '')
