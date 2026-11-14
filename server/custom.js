@@ -105,6 +105,9 @@ function record(a, r) {
   a.title = r.title || r.summary || r.name && role === 'session' && r.name || a.title
   a.cwd = r.cwd || r.workdir || r.workspace || a.cwd
   a.parent = a.parent || r.parent_id || r.parentId || r.parent_session_id || r.parentSessionId || null
+  // OpenAI-style usage (prompt/completion) or Anthropic-style (input/output) on a reply.
+  const us = r.usage || m.usage
+  if (us && typeof us === 'object') a.tokens += us.total_tokens ?? ((us.prompt_tokens || 0) + (us.completion_tokens || 0) + (us.input_tokens || 0) + (us.output_tokens || 0))
   if (/complete|finished|done|exit|end/.test(String(r.status || r.type || r.event || '').toLowerCase())) a.done = true
   const calls = m.tool_calls || r.tool_calls || (role.includes('tool') && (m.name || r.tool) ? [{ name: m.name || r.tool, arguments: m.arguments || r.input }] : [])
   for (const c of Array.isArray(calls) ? calls : []) {
@@ -120,7 +123,7 @@ function record(a, r) {
   else a.events.push({ kind: 'say', text: clip(t) })
 }
 function readLog(file, st) {
-  const a = { title: '', cwd: '', model: '', prompt: '', first: '', events: [], parent: null, done: false }
+  const a = { title: '', cwd: '', model: '', prompt: '', first: '', events: [], parent: null, done: false, tokens: 0 }
   try {
     const size = Math.min(st.size, 4 * 1024 * 1024)
     const fd = fs.openSync(file, 'r'); const buf = Buffer.alloc(size)
@@ -156,6 +159,7 @@ function report(body) {
   if (body.parent) r.parent = clip(body.parent, 120)
   if (body.cwd) r.cwd = clip(body.cwd, 300)
   if (body.model) r.model = clip(body.model, 80)
+  if (Number.isFinite(body.tokens) && body.tokens >= 0) r.tokens = Math.round(body.tokens) // the run's total so far
   if (body.prompt) { r.prompt = clip(body.prompt, 400); r.events.push({ kind: 'prompt', text: clip(body.prompt) }) }
   if (body.text) r.events.push({ kind: body.kind === 'tool' ? 'tool' : body.kind === 'prompt' ? 'prompt' : 'say', text: clip(body.text) })
   r.done = body.state === 'done' ? true : body.state === 'working' ? false : r.done
@@ -177,14 +181,14 @@ function collectCustom(since, state) {
       const id = path.basename(file).replace(/\.[^.]+$/, '')
       nodes.push({ id: `${ag.key}:${id}`, tool: ag.key, kind: ag.name, title: clip(a.title || a.first || a.prompt, 80) || id.slice(0, 12),
         cwd: a.cwd, model: a.model, prompt: clip(a.prompt, 400), events: a.events, mtime: st.mtimeMs, state: state(st.mtimeMs, a.done),
-        children: [], start: st.birthtimeMs || st.mtimeMs, cli: ag.cli, _parent: a.parent ? `${ag.key}:${a.parent}` : null })
+        children: [], tokens: a.tokens, start: st.birthtimeMs || st.mtimeMs, cli: ag.cli, _parent: a.parent ? `${ag.key}:${a.parent}` : null })
     }
   }
   for (const r of reports.values()) {
     if (r.mtime < since) continue
     const ag = cfg.agents.find(a => a.key === r.key)
     nodes.push({ id: r.id, tool: r.key, kind: r.name, title: r.title || clip(r.prompt, 80) || r.id, cwd: r.cwd || '', model: r.model || '',
-      prompt: r.prompt || '', events: r.events, mtime: r.mtime, state: state(r.mtime, r.done), children: [], start: r.start,
+      prompt: r.prompt || '', events: r.events, mtime: r.mtime, state: state(r.mtime, r.done), children: [], tokens: r.tokens || 0, start: r.start,
       cli: ag ? ag.cli : [], _parent: r.parent || null })
   }
   return nodes

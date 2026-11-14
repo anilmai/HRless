@@ -2,3 +2,4 @@ hrless-test-grafik.jpg
 .claude-plugin/types/
 *.log
 .DS_Store
+server/icons/

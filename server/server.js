@@ -39,6 +39,10 @@ function tailJson(file, bytes = 256 * 1024) {
     return out
   } finally { fs.closeSync(fd) }
 }
+function headText(file, bytes = 64 * 1024) {
+  try { const fd = fs.openSync(file, 'r'); const buf = Buffer.alloc(bytes); const n = fs.readSync(fd, buf, 0, bytes, 0); fs.closeSync(fd); return buf.subarray(0, n).toString('utf8') }
+  catch { return '' }
+}
 function headJson(file, bytes = 64 * 1024) {
   const fd = fs.openSync(file, 'r')
   try {
@@ -75,7 +79,7 @@ function scanClaude(file) {
   const st = stat(file); if (!st) return null
   let c = scans.get(file)
   if (!c || st.size < c.pos) {
-    c = { pos: 0, rest: '', d: { title: '', cwd: '', model: '', prompt: '', events: [], agentCalls: new Set(), bash: [], open: new Map(), start: 0 } }
+    c = { pos: 0, rest: '', d: { title: '', cwd: '', model: '', prompt: '', events: [], agentCalls: new Set(), bash: [], open: new Map(), start: 0, usage: new Map() } }
     scans.set(file, c)
   }
   if (st.size > c.pos) {
@@ -110,6 +114,9 @@ function claudeRecord(d, r) {
   }
   if (r.type === 'assistant' && m) {
     if (m.model && m.model !== '<synthetic>') d.model = m.model
+    // One reply can be written over several lines, each carrying the same usage: keyed by message id.
+    const u = m.usage
+    if (u && m.id) d.usage.set(m.id, (u.input_tokens || 0) + (u.output_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0))
     for (const b of m.content || []) {
       if (b.type === 'text' && b.text.trim()) push({ kind: 'say', text: clip(b.text) })
       if (b.type !== 'tool_use') continue
@@ -125,7 +132,8 @@ function claudeRecord(d, r) {
 }
 function claudeNode(id, kind, d, title, mtime, done) {
   return { id, tool: 'claude', kind, title: title || clip(d.prompt, 80) || id.slice(0, 8), cwd: d.cwd, model: d.model,
-    prompt: clip(d.prompt, 400), events: d.events, mtime, state: state(mtime, done), children: [], start: d.start, _d: d }
+    prompt: clip(d.prompt, 400), events: d.events, mtime, state: state(mtime, done), children: [], start: d.start, _d: d,
+    tokens: [...d.usage.values()].reduce((x, y) => x + y, 0) }
 }
 // One session as a tree: subagents hang under whoever called them (a subagent can call its own).
 function claudeSession(dir, id, since) {
@@ -202,14 +210,24 @@ function settle(n) {
 // ---------- Codex ----------
 function codexFiles(since) {
   const files = []
-  const walk = (dir, depth) => {
+  // sessions/YYYY/MM/DD: a folder's own mtime only moves when a child is added, so the
+  // folder's date (its name) decides; a run may keep writing for days, hence the 3-day margin.
+  const walk = (dir, depth, ymd) => {
     for (const e of ls(dir)) {
       const p = path.join(dir, e); const st = stat(p); if (!st) continue
-      if (st.isDirectory()) { if (depth < 3 && st.mtimeMs >= since - 86400000) walk(p, depth + 1) }
-      else if (e.endsWith('.jsonl') && st.mtimeMs >= since) files.push([p, st.mtimeMs])
+      if (st.isDirectory()) {
+        if (depth >= 3) continue
+        const parts = [...ymd, Number(e)]
+        if (parts.every(Number.isFinite)) {
+          const [y, m = 12, d] = parts
+          const end = depth === 0 ? Date.UTC(y + 1, 0, 1) : depth === 1 ? Date.UTC(y, m, 1) : Date.UTC(y, m - 1, d + 1)
+          if (end < since - 3 * 86400000) continue
+        }
+        walk(p, depth + 1, parts)
+      } else if (e.endsWith('.jsonl') && st.mtimeMs >= since) files.push([p, st.mtimeMs])
     }
   }
-  walk(path.join(CODEX, 'sessions'), 0)
+  walk(path.join(CODEX, 'sessions'), 0, [])
   return files
 }
 // A parsed agy or Codex file is kept until the file changes: polling every 3 s then costs a stat, not a parse.
@@ -233,7 +251,10 @@ function collectCodex(since) {
       const p = r.payload || {}
       if (r.type === 'turn_context' && p.model) a.model = p.model
       if (p.model && typeof p.model === 'string') a.model = p.model
+      if (p.thread_settings?.model) a.model = p.thread_settings.model
       if (r.type === 'event_msg' && p.type === 'task_started') a.done = false
+      // Codex reports a running total for the thread.
+      if (r.type === 'event_msg' && p.type === 'token_count' && p.info?.total_token_usage) a.tokens = p.info.total_token_usage.total_tokens || 0
       if (r.type === 'event_msg' && (p.type === 'task_complete' || p.type === 'turn_aborted')) a.done = true
       if (r.type !== 'response_item') continue
       if (p.type === 'message' && p.role === 'user') {
@@ -250,6 +271,8 @@ function collectCodex(since) {
         a.events.push({ t: r.timestamp, kind: 'tool', text: `${p.name || p.type}: ${clip(Array.isArray(arg) ? arg.join(' ') : arg, 160)}` })
       }
     }
+    // The model is set once near the start, which a long thread's tail no longer holds.
+    if (!a.model) { const m = headText(file).match(/"thread_settings":\{"model":"([^"]+)"/); if (m) a.model = m[1] }
     if (!a.title) a.title = clip(a.prompt, 80) || id.slice(0, 8)
     a.prompt = clip(a.prompt, 400); a.events = a.events.slice(-8)
     return a
@@ -285,6 +308,28 @@ function stepTime(buf) {
   }
   return best * 1000
 }
+// A generation's metadata (protobuf) holds its usage at field 1.4: 1 input, 2 and 3 output and
+// thinking, 5 cache reads. agy publishes no schema, so this is a close count read from its files.
+function pbFields(b) {
+  const out = new Map(); let i = 0
+  const vint = () => { let v = 0, s = 0, x; do { x = b[i++]; v += (x & 127) * 2 ** s; s += 7 } while (x & 128 && i < b.length); return v }
+  while (i < b.length) {
+    const k = vint(), f = Math.floor(k / 8), w = k & 7
+    if (w === 0) out.set(f, vint())
+    else if (w === 2) { const l = vint(); out.set(f, b.subarray(i, i + l)); i += l }
+    else if (w === 1) i += 8; else if (w === 5) i += 4; else break
+  }
+  return out
+}
+function genTokens(buf) {
+  try {
+    const one = pbFields(Buffer.from(buf || [])).get(1)
+    const use = one && typeof one !== 'number' && pbFields(one).get(4)
+    if (!use || typeof use === 'number') return 0
+    const u = pbFields(use), n = k => typeof u.get(k) === 'number' ? u.get(k) : 0
+    return n(1) + n(2) + n(3) + n(5)
+  } catch { return 0 }
+}
 function agyHistory() {
   const map = new Map()
   for (const r of tailJson(path.join(AGY, 'history.jsonl'), 512 * 1024)) {
@@ -315,6 +360,8 @@ function collectAgy(since) {
         if (ws && !a.cwd) a.cwd = decodeURIComponent(ws[1])
         const parentRef = db.prepare('select data from parent_references limit 1').get()
         if (parentRef) { const m = runs(parentRef.data).join(' ').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/); if (m && m[0] !== id) a.parent = m[0] }
+        a.tokens = 0
+        for (const g of db.prepare('select data from gen_metadata').all()) a.tokens += genTokens(g.data)
         const steps = db.prepare('select idx, step_type, step_payload, metadata from steps order by idx desc limit 40').all().reverse()
         for (const s of steps) {
           const t = stepTime(s.metadata); if (t > (a.real || 0)) a.real = t
