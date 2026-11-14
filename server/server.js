@@ -224,11 +224,19 @@ function codexFiles(since) {
           if (end < since - 3 * 86400000) continue
         }
         walk(p, depth + 1, parts)
-      } else if (e.endsWith('.jsonl') && st.mtimeMs >= since) files.push([p, st.mtimeMs])
+      } else if (e.endsWith('.jsonl')) { const t = lastWrite(p, st); if (t >= since) files.push([p, t, st.size]) }
     }
   }
   walk(path.join(CODEX, 'sessions'), 0, [])
   return files
+}
+// Windows does not move a file's mtime while a process keeps it open and appends (Codex does),
+// so a file that grew since the last poll counts as written now.
+const growth = new Map()
+function lastWrite(file, st) {
+  const g = growth.get(file)
+  if (!g || g.size !== st.size) { growth.set(file, { size: st.size, at: g ? Date.now() : st.mtimeMs }); return g ? Date.now() : st.mtimeMs }
+  return Math.max(g.at, st.mtimeMs)
 }
 // A parsed agy or Codex file is kept until the file changes: polling every 3 s then costs a stat, not a parse.
 const memoMap = new Map()
@@ -239,8 +247,9 @@ function memo(key, ver, fn) {
 }
 function collectCodex(since) {
   const all = new Map()
-  for (const [file, mtime] of codexFiles(since)) {
-    const b = memo(file, mtime, () => {
+  for (const [file, mtime, size] of codexFiles(since)) {
+    // Keyed by size too: the mtime alone may not move while Codex writes.
+    const b = memo(file, size, () => {
     const head = headJson(file)?.payload || {}
     const id = head.id || head.session_id || path.basename(file)
     const spawnInfo = head.source?.subagent?.thread_spawn
@@ -259,7 +268,8 @@ function collectCodex(since) {
       if (r.type !== 'response_item') continue
       if (p.type === 'message' && p.role === 'user') {
         const t = (p.content || []).map(c => c.text || '').join(' ')
-        if (t && !/^\s*<(environment_context|user_instructions|permissions|collaboration)/.test(t)) { a.prompt = t; a.events.push({ t: r.timestamp, kind: 'prompt', text: clip(t) }) }
+        // Skip what Codex injects as a user message (environment, AGENTS.md); keep what was asked.
+        if (t && !/^\s*(<(environment_context|user_instructions|permissions|collaboration)|# AGENTS\.md instructions)/.test(t)) { a.prompt = t; a.events.push({ t: r.timestamp, kind: 'prompt', text: clip(t) }) }
       }
       if (p.type === 'message' && p.role === 'assistant') {
         const t = (p.content || []).map(c => c.text || '').join(' ')
@@ -277,7 +287,7 @@ function collectCodex(since) {
     a.prompt = clip(a.prompt, 400); a.events = a.events.slice(-8)
     return a
     })
-    all.set(b.id, { ...b, children: [], state: state(b.mtime, b.done) })
+    all.set(b.id, { ...b, mtime, children: [], state: state(mtime, b.done) })
   }
   const roots = []
   for (const a of all.values()) {
@@ -349,7 +359,8 @@ function collectAgy(since) {
     const mtime = Math.max(...[f, f + '-wal'].map(x => stat(path.join(dir, x))?.mtimeMs || 0))
     if (mtime < since) continue
     const h = hist.get(id)
-    const b = memo(path.join(dir, f), mtime + ':' + (h?.prompts.length || 0), () => {
+    const size = [f, f + '-wal'].map(x => stat(path.join(dir, x))?.size || 0).join('+') // see lastWrite
+    const b = memo(path.join(dir, f), mtime + ':' + size + ':' + (h?.prompts.length || 0), () => {
     const a = { cli: ['agy'], start: stat(path.join(dir, f))?.birthtimeMs || mtime, id, tool: 'agy', kind: 'conversation', title: '', cwd: h?.workspace || '', model: 'gemini', prompt: '', events: [], mtime, children: [], parent: null }
     if (sqlite) {
       let db
