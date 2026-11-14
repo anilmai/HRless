@@ -16,7 +16,6 @@
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,"Segoe UI",sans-serif}
 header{position:sticky;top:0;z-index:3;background:var(--bg);border-bottom:1px solid var(--line)}
 .bar{max-width:1100px;margin:0 auto;padding:14px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
-body.graph .bar{max-width:none}
 h1{font-size:17px;margin:0;letter-spacing:-.01em}
 .counts{display:flex;gap:14px;color:var(--dim);font-variant-numeric:tabular-nums}
 .counts b{color:var(--text);font-weight:600}
@@ -82,8 +81,41 @@ body.graph #graph{display:block}
 .legend .faded{width:10px;height:10px;border-radius:50%;flex:none;background:var(--faint);opacity:.4}
 .legend .hint{color:var(--faint);margin-top:8px;line-height:1.4}
 .legend .reset{margin-top:8px;border:1px solid var(--line);background:transparent;color:var(--dim);border-radius:6px;padding:3px 8px;font:inherit;cursor:pointer}
+.story{position:absolute;top:12px;left:12px;width:min(330px,calc(100% - 24px));max-height:calc(55% - 12px);overflow:hidden auto;background:color-mix(in srgb,var(--panel) 90%,transparent);
+  border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.45;backdrop-filter:blur(6px)}
+.story:empty{display:none}
+.story section+section{border-top:1px solid var(--line);margin-top:10px;padding-top:10px}
+.story h3{font-size:11px;font-weight:600;color:var(--faint);margin:0 0 4px;letter-spacing:.02em}
+.story p{margin:0 0 6px}
+.story ul{list-style:none;margin:0 0 6px;padding:0}
+.story li{display:flex;gap:7px;align-items:baseline;padding:1px 0}
+.story li .sw{width:8px;height:8px;border-radius:50%;flex:none;transform:translateY(-1px)}
+.story li .who{font-weight:600;white-space:nowrap}
+.story li .what{color:var(--dim);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.story li .st{margin-left:auto;color:var(--faint);font-size:12px;white-space:nowrap}
+.story li.working .st{color:var(--work)}
+.story .now{color:var(--text)}
+.story .wait::after{content:'';display:inline-block;width:1.2em;text-align:left;animation:dots 1.4s steps(4) infinite}
+@keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+@media (max-width:640px){.story{max-height:30%}}
 .info{position:absolute;left:12px;bottom:12px;width:min(420px,calc(100% - 24px));background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:none;max-height:45%;overflow:hidden auto}
 .info.show{display:block}
+dialog#settings{width:min(760px,calc(100% - 32px));border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text);padding:18px 20px}
+dialog#settings::backdrop{background:rgba(0,0,0,.45)}
+dialog#settings h2{font-size:16px;margin:0 0 6px}
+.sdesc{color:var(--dim);font-size:13px;margin:6px 0 10px}
+.sdesc code,#setPath{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.sdesc pre{background:var(--chip);border-radius:6px;padding:8px 10px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
+.srow{display:grid;grid-template-columns:1.1fr 38px 1fr 2fr 28px;gap:6px;margin-bottom:6px}
+.srow input{border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:6px;padding:5px 8px;font:inherit;font-size:13px;min-width:0}
+.srow input[type=color]{padding:2px;height:32px}
+.srow .del,.link,.sfoot button{border:1px solid var(--line);background:transparent;color:var(--dim);border-radius:6px;cursor:pointer;font:inherit;font-size:13px;padding:4px 10px}
+.srow .del{padding:0}
+.link{border-style:dashed}
+.sfoot{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:8px}
+.sfoot #setMsg{flex:1;color:var(--idle);font-size:13px}
+.sfoot .primary{background:var(--text);color:var(--bg);border-color:var(--text)}
+@media (max-width:640px){.srow{grid-template-columns:1fr 38px 28px}.srow .cli,.srow .logs{grid-column:1/-1}}
 .info .x{float:right;border:0;background:transparent;color:var(--faint);cursor:pointer;font-size:16px;line-height:1}
 .gempty{position:absolute;inset:0;display:grid;place-items:center;color:var(--dim);pointer-events:none}
 .gempty[hidden]{display:none}
@@ -104,6 +136,9 @@ body.graph #graph{display:block}
   <div class="seg" id="range" role="group" aria-label="Zaman">
     <button data-v="0.5" aria-pressed="true">Aktif</button><button data-v="24">24 saat</button><button data-v="168">7 gün</button>
   </div>
+  <button class="icon" id="setBtn" title="Your agents" aria-label="Your agents">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/><path d="M19 3v5M16.5 5.5h5"/></svg>
+  </button>
   <button class="icon" id="viewBtn" aria-pressed="false" title="Grafik görünümü" aria-label="Grafik görünümü">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="5" r="2.4"/><circle cx="5.5" cy="18" r="2.4"/><circle cx="18.5" cy="18" r="2.4"/><circle cx="12" cy="18" r="1.6"/><path d="M10.8 7.1 6.7 15.9M13.2 7.1l4.1 8.8M12 7.4v9"/></svg>
   </button>
@@ -113,8 +148,22 @@ body.graph #graph{display:block}
   <canvas id="cv"></canvas>
   <div class="gempty" id="gempty">Yükleniyor…</div>
   <aside class="legend" id="legend"></aside>
+  <aside class="story" id="story" aria-live="polite"></aside>
   <div class="info" id="info"></div>
 </section>
+<dialog id="settings" aria-labelledby="setTitle">
+  <h2 id="setTitle">Your agents</h2>
+  <p class="sdesc">Add any agent HRless does not know yet (DeepSeek, Aider, your own bot). It shows under its own name and colour.
+    <b>Command</b>: when a Claude agent runs it from the shell, the new conversation hangs under that Claude agent.
+    <b>Session files</b>: where the agent writes its conversations (JSON Lines or JSON chat logs); <code>~</code>, <code>*</code> and <code>**</code> work.</p>
+  <div id="setRows"></div>
+  <button id="setAdd" class="link">+ Add agent</button>
+  <details class="sdesc"><summary>No session files? Report from the agent itself</summary>
+    <p>Any script, hook or wrapper can tell HRless what it is doing. Optional fields: <code>parent</code> (the id of the agent that started it), <code>prompt</code>, <code>model</code>, <code>cwd</code>, <code>kind</code> (tool / say / prompt), <code>state</code> (working / done).</p>
+    <pre id="setReport"></pre></details>
+  <p class="sdesc">Saved to <code id="setPath"></code></p>
+  <div class="sfoot"><span id="setMsg" role="status"></span><button id="setClose">Cancel</button><button id="setSave" class="primary">Save</button></div>
+</dialog>
 <script>
 // Opened from a session's HRless button: ?session=<id> shows only that session's agent tree.
 const SESSION = new URLSearchParams(location.search).get('session')
@@ -126,6 +175,12 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 const STATE = { working: 'çalışıyor', idle: 'boşta', done: 'bitti' }
 const KIND = { prompt: 'istek', tool: 'araç', say: 'yanıt' }
 const TOOL = { claude: 'Claude', codex: 'Codex', agy: 'agy' }
+// Names of custom agents come from the server (the user's config), built-ins from here.
+// A custom agent shows its own name once; a built-in shows tool and kind.
+const tag = a => S.data?.sources?.[a.tool]?.color || !TOOL[a.tool]
+  ? `<span class="tag" style="color:${esc(S.data?.sources?.[a.tool]?.color || "inherit")}">${esc(toolName(a.tool))}</span>`
+  : `<span class="tag ${a.tool}">${TOOL[a.tool]} · ${esc(a.kind)}</span>`
+const toolName = t => S.data?.sources?.[t]?.name || TOOL[t] || t
 function ago(ms) {
   const s = Math.max(0, Math.round((Date.now() - ms) / 1000))
   if (s < 60) return s + ' sn önce'; if (s < 3600) return Math.round(s / 60) + ' dk önce'
@@ -143,7 +198,7 @@ function card(a) {
       <span class="dot" title="${STATE[a.state]}"></span>
       <div style="min-width:0">
         <div class="top"><span class="title">${esc(a.title)}</span>
-          <span class="tag ${a.tool}">${TOOL[a.tool]} · ${esc(a.kind)}</span>
+          ${tag(a)}
           ${a.children.length ? `<span class="tag">${a.children.length} alt agent${live ? `, ${live} çalışıyor` : ''}</span>` : ''}</div>
         ${last ? `<div class="now"><span class="k">${KIND[last.kind]}:</span> ${esc(last.text)}</div>` : ''}
         <div class="meta">${esc(short(a.cwd))}${a.model ? ' · ' + esc(a.model) : ''}</div>
@@ -166,6 +221,7 @@ function render() {
   const all = S.data.agents
   const count = st => { let n = 0; const w = a => { if (a.state === st) n++; a.children.forEach(w) }; all.forEach(w); return n }
   document.getElementById('counts').innerHTML = `<span><b>${count('working')}</b> çalışıyor</span><span><b>${count('idle')}</b> boşta</span><span><b>${SESSION ? count('working') + count('idle') + count('done') : all.length}</b> ${SESSION ? 'agent' : 'oturum'}</span>`
+  syncTools()
   const list = visible()
   if (S.view === 'graph') return Graph.sync(list)
   document.getElementById('list').innerHTML = list.length ? list.map(card).join('')
@@ -180,10 +236,37 @@ const Graph = (() => {
   const FIXED = { 'claude:session': '#f97316', 'codex:thread': '#3b82f6', 'agy:conversation': '#a855f7', 'codex:guardian': '#64748b' }
   const PAL = ['#22c55e', '#eab308', '#ec4899', '#14b8a6', '#ef4444', '#84cc16', '#06b6d4', '#f43f5e', '#6366f1', '#f59e0b', '#10b981', '#0ea5e9', '#d946ef']
   const NAMES = { 'claude:session': 'Claude oturumu', 'codex:thread': 'Codex thread', 'agy:conversation': 'agy konuşması', 'codex:guardian': 'Codex guardian' }
+  const MAIN = { claude: 'claude:session', codex: 'codex:thread', agy: 'agy:conversation' }
   const cat = a => `${a.tool}:${a.kind}`
-  const catName = k => NAMES[k] || `${TOOL[k.split(':')[0]]} · ${k.split(':').slice(1).join(':')}`
+  const toolOf = k => k.split(':')[0]
+  const custom = k => !MAIN[toolOf(k)]
+  const catName = k => k.endsWith(':group') ? `${toolName(toolOf(k))} · group`
+    : custom(k) ? toolName(toolOf(k)) : NAMES[k] || `${toolName(toolOf(k))} · ${k.split(':').slice(1).join(':')}`
   const hash = s => { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h }
-  const color = k => FIXED[k] || PAL[hash(k) % PAL.length]
+  // A custom agent keeps the colour its owner picked; a group takes its tool's colour.
+  const color = k => k.endsWith(':group') ? color(MAIN[toolOf(k)] || toolOf(k) + ':x')
+    : custom(k) ? (S.data?.sources?.[toolOf(k)]?.color || PAL[hash(toolOf(k)) % PAL.length])
+    : FIXED[k] || PAL[hash(k) % PAL.length]
+
+  // Agents nobody here started (a script ran agy forty times, say) would fill the screen as a grid of
+  // loose balls: three or more of one tool in one folder become one group ball with them beneath it.
+  function group(list) {
+    const loose = new Map(), out = []
+    for (const a of list) {
+      if (a.children.length || a.tool === 'claude') { out.push(a); continue }
+      const key = a.tool
+      if (!loose.has(key)) loose.set(key, [])
+      loose.get(key).push(a)
+    }
+    for (const [key, items] of loose) {
+      if (items.length < 3) { out.push(...items); continue }
+      const st = items.some(a => a.state === 'working') ? 'working' : items.some(a => a.state === 'idle') ? 'idle' : 'done'
+      const a0 = items[0]
+      out.push({ id: 'group:' + key, tool: a0.tool, kind: 'group', title: `${toolName(a0.tool)} · not started from Claude (${items.length})`,
+        cwd: a0.cwd, model: '', prompt: '', events: [], mtime: Math.max(...items.map(a => a.mtime)), state: st, children: items })
+    }
+    return out
+  }
   const TIER = 110, LEAF = 44, ROOT_W = 250, ROW_GAP = 90
 
   const nodes = new Map()
@@ -208,12 +291,13 @@ const Graph = (() => {
       if (!parent) roots.push(n); else { parent.children.push(n); links.push([parent, n]) }
       a.children.forEach(c => walk(c, n, depth + 1))
     }
-    list.forEach(a => walk(a, null, 0))
+    group(list).forEach(a => walk(a, null, 0))
     for (const id of [...nodes.keys()]) if (!seen.has(id)) nodes.delete(id)
     layout()
     if (sel && !nodes.has(sel.id)) closeInfo()
     if (sel) showInfo(sel)
     legend()
+    story(list)
     emptyEl.hidden = nodes.size > 0
     emptyEl.textContent = S.hours === '0.5' ? 'Son 30 dakikada çalışan agent yok. “24 saat” ile geçmişe bak.' : 'Bu aralıkta agent yok.'
     if (!fitted && nodes.size) { for (const n of nodes.values()) { n.x = n.tx; n.y = n.ty } fit(); fitted = true }
@@ -224,10 +308,22 @@ const Graph = (() => {
   // Trees are packed left to right and wrap into rows, busiest first, so many sessions still fit one screen.
   // A small tree (one session) gets room for every name; a big one packs its leaves tight.
   const leafW = () => nodes.size <= 30 ? 170 : LEAF
-  const width = n => n.w = Math.max(n.depth === 0 ? ROOT_W : leafW(), n.children.reduce((s, c) => s + width(c), 0))
-  const height = n => n.children.length ? 1 + Math.max(...n.children.map(height)) : 0
+  // Many leaves under one parent stack into a block of short rows instead of one endless row.
+  const isFan = n => n.children.length > 12 && n.children.every(c => !c.children.length)
+  const cols = n => Math.ceil(Math.sqrt(n.children.length * 3))
+  const FAN_ROW = TIER * .45
+  function width(n) {
+    if (isFan(n)) { n.children.forEach(c => c.w = leafW()); return n.w = Math.max(n.depth === 0 ? ROOT_W : leafW(), cols(n) * leafW()) }
+    return n.w = Math.max(n.depth === 0 ? ROOT_W : leafW(), n.children.reduce((s, c) => s + width(c), 0))
+  }
+  const height = n => !n.children.length ? 0 : isFan(n) ? 1 + (Math.ceil(n.children.length / cols(n)) - 1) * FAN_ROW / TIER : 1 + Math.max(...n.children.map(height))
   function place(n, x, y) {
     n.tx = x + n.w / 2; n.ty = y
+    if (isFan(n)) {
+      const c = cols(n), x0 = x + (n.w - c * leafW()) / 2
+      n.children.forEach((ch, i) => { ch.tx = x0 + (i % c + .5) * leafW(); ch.ty = y + TIER + Math.floor(i / c) * FAN_ROW })
+      return
+    }
     let cx = x + (n.w - n.children.reduce((s, c) => s + c.w, 0)) / 2
     for (const c of n.children) { place(c, cx, y + TIER); cx += c.w }
   }
@@ -236,7 +332,7 @@ const Graph = (() => {
     order.forEach(width)
     const total = order.reduce((s, r) => s + r.w, 0)
     // Rows as wide as the screen's shape asks: wide on a monitor, two trees a row on a phone.
-    const aspect = W && H ? (W - (W > 640 ? 250 : 40)) / H : 2
+    const aspect = W && H ? (W - (W > 640 ? 250 : 40) - (W > 900 ? 350 : 0)) / H : 2
     const rowMax = Math.max(ROOT_W, Math.sqrt(total * 260 * aspect))
     let x = 0, y = 0, rowH = 0
     for (const r of order) {
@@ -257,9 +353,11 @@ const Graph = (() => {
     if (!nodes.size) return
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
     for (const n of nodes.values()) { x0 = Math.min(x0, n.tx); x1 = Math.max(x1, n.tx); y0 = Math.min(y0, n.ty); y1 = Math.max(y1, n.ty) }
-    const room = W - (W > 640 ? 250 : 40)
+    // Leave the legend (right) and the story box (left) their room on a wide screen.
+    const left = W > 900 && document.getElementById("story").innerHTML ? 350 : 0
+    const room = W - (W > 640 ? 250 : 40) - left
     cam.k = Math.max(.25, Math.min(nodes.size <= 30 ? 1.8 : 1.3, room / (x1 - x0 + 200), (H - 100) / (y1 - y0 + 100)))
-    cam.x = room / 2 - (x0 + x1) / 2 * cam.k
+    cam.x = left + room / 2 - (x0 + x1) / 2 * cam.k
     cam.y = (H - (y1 - y0) * cam.k) / 2 - y0 * cam.k
   }
   const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim()
@@ -320,6 +418,49 @@ const Graph = (() => {
     if (active) requestAnimationFrame(draw)
   }
 
+  // The left box tells the running work as sentences: who orchestrates, whom it assigned, who waits for whom.
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1)
+  function who(a) {
+    const m = a.model || ''
+    let r = m.match(/claude-(opus|sonnet|haiku|fable)-(\d+)-(\d+)/)
+    if (r) return `${cap(r[1])} ${r[2]}.${r[3]}`
+    if ((r = m.match(/gpt-([\d.]+)-(\w+)/))) return `${cap(r[2])} ${r[1]}`
+    if ((r = m.match(/gemini-([\d.]+)-(\w+)/))) return `${cap(r[2])} ${r[1]}`
+    if ((r = m.match(/deepseek-?([\w.]*)/i))) return `DeepSeek ${r[1]}`.trim()
+    return m && m !== 'gemini' ? m : toolName(a.tool)
+  }
+  const label = a => a.tool === 'claude' && a.kind !== 'session' && a.kind !== 'subagent' ? `${who(a)} · ${a.kind}` : who(a)
+  const STATE_EN = { working: 'working', idle: 'idle', done: 'done' }
+  const all = a => a.children.flatMap(c => [c, ...all(c)])
+  function item(a, depth) {
+    return `<li class="${a.state}" style="padding-left:${depth * 14}px"><span class="sw" style="background:${color(cat(a))}"></span>
+      <span class="who">${esc(label(a))}</span><span class="what" title="${esc(a.title)}">${esc(a.title)}</span><span class="st">${STATE_EN[a.state]}</span></li>`
+      + a.children.slice(0, 12).map(c => item(c, depth + 1)).join('')
+  }
+  function tell(a) {
+    const name = esc(who(a))
+    const kids = all(a), busy = kids.filter(k => k.state === 'working')
+    const last = a.events[a.events.length - 1]
+    let line
+    if (!kids.length) line = a.state === 'working' ? `<b>${name}</b> is working alone.` : `<b>${name}</b> worked alone.`
+    else line = `<b>${name}</b> ${a.state === 'done' ? 'called' : 'has called'} ${a.children.length} agent${a.children.length > 1 ? 's' : ''}${kids.length > a.children.length ? `, which called ${kids.length - a.children.length} more` : ''}.`
+    let now
+    if (busy.length && a.state !== 'working') now = `<span class="wait"><b>${name}</b> is waiting for ${busy.map(k => esc(who(k))).join(', ')} to finish</span>`
+    else if (busy.length) now = `<b>${name}</b> and ${busy.length} agent${busy.length > 1 ? 's are' : ' is'} working.`
+    else if (a.state === 'working') now = `<b>${name}</b> is working${last ? ': ' + esc(last.text.slice(0, 90)) : '.'}`
+    else now = a.state === 'idle' ? `Idle since ${ago(a.mtime)}.` : 'All work is finished.'
+    return `<section><h3>${esc(a.title.toUpperCase().slice(0, 60))}</h3><p>${line}</p>
+      ${kids.length ? `<h3>ASSIGNED</h3><ul>${a.children.slice(0, 12).map(c => item(c, 0)).join('')}</ul>` : ''}
+      <p class="now">${now}</p></section>`
+  }
+  function story(list) {
+    const el = document.getElementById('story')
+    // One session: its own story. Every session: the ones with work going on, busiest first.
+    const live = a => a.state === 'working' || all(a).some(k => k.state === 'working')
+    const pick = SESSION ? list : list.filter(live).slice(0, 3)
+    el.innerHTML = pick.map(tell).join('')
+  }
+
   function legend() {
     const counts = new Map()
     for (const n of nodes.values()) counts.set(n.k, (counts.get(n.k) || 0) + 1)
@@ -336,7 +477,7 @@ const Graph = (() => {
   function showInfo(n) {
     sel = n; const a = n.a
     infoEl.innerHTML = `<button class="x" aria-label="Kapat">×</button>
-      <div class="top"><span class="title">${esc(a.title)}</span><span class="tag ${a.tool}">${TOOL[a.tool]} · ${esc(a.kind)}</span></div>
+      <div class="top"><span class="title">${esc(a.title)}</span>${tag(a)}</div>
       <div class="meta" style="margin-bottom:8px">${STATE[a.state]} · ${ago(a.mtime)}${a.model ? ' · ' + esc(a.model) : ''}${n.kids ? ` · ${n.kids} alt agent` : ''}</div>${detail(a)}`
     infoEl.classList.add('show')
   }
@@ -381,6 +522,64 @@ async function load() {
     S.data = await r.json(); render()
   } catch { document.getElementById('list').innerHTML = '<div class="empty">Sunucuya ulaşılamadı. Claude Code’daki HRless düğmesine yeniden bas.</div>' }
 }
+// One filter button per custom agent the user added, after the built-in ones.
+let toolsKey = ''
+function syncTools() {
+  const custom = Object.entries(S.data?.sources || {}).filter(([k]) => !TOOL[k])
+  const key = custom.map(([k, v]) => k + v.name).join('|')
+  if (key === toolsKey) return
+  toolsKey = key
+  const el = document.getElementById('tools')
+  el.querySelectorAll('[data-custom]').forEach(b => b.remove())
+  for (const [k, v] of custom) {
+    const b = document.createElement('button'); b.dataset.v = k; b.dataset.custom = ''; b.textContent = v.name
+    b.setAttribute('aria-pressed', S.tool === k); el.append(b)
+  }
+}
+
+// ---------- settings: the user's own agents ----------
+const Settings = (() => {
+  const dlg = document.getElementById('settings'), rows = document.getElementById('setRows'), msg = document.getElementById('setMsg')
+  const row = (a = {}) => {
+    const r = document.createElement('div'); r.className = 'srow'
+    r.innerHTML = `<input class="nm" placeholder="Name (e.g. DeepSeek)" value="${esc(a.name || '')}" aria-label="Name">
+      <input type="color" value="${esc(a.color || '#4d6bfe')}" aria-label="Colour">
+      <input class="cli" placeholder="Command (e.g. deepseek)" value="${esc((a.cli || []).join(' '))}" aria-label="Command">
+      <input class="logs" placeholder="Session files, e.g. ~/.deepseek/sessions/**/*.jsonl" value="${esc(a.logs || '')}" aria-label="Session files">
+      <button class="del" aria-label="Remove" title="Remove">×</button>`
+    r.querySelector('.del').onclick = () => r.remove()
+    rows.append(r)
+  }
+  async function open() {
+    msg.textContent = ''; rows.innerHTML = ''
+    try {
+      const c = await (await fetch('/api/config', { cache: 'no-store' })).json()
+      document.getElementById('setPath').textContent = c.path
+      c.agents.forEach(row)
+    } catch { msg.textContent = 'Could not read the settings.' }
+    if (!rows.children.length) row()
+    dlg.showModal()
+  }
+  async function saveAll() {
+    const agents = [...rows.children].map(r => ({
+      name: r.querySelector('.nm').value.trim(), color: r.querySelector('[type=color]').value,
+      cli: r.querySelector('.cli').value.trim().split(/[\s,]+/).filter(Boolean), logs: r.querySelector('.logs').value.trim(),
+    })).filter(a => a.name)
+    try {
+      const res = await fetch('/api/config', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ agents }) })
+      if (!res.ok) throw new Error((await res.json()).error)
+      dlg.close(); toolsKey = ''; load()
+    } catch (e) { msg.textContent = 'Not saved: ' + e.message }
+  }
+  document.getElementById('setBtn').onclick = open
+  document.getElementById('setAdd').onclick = () => row()
+  document.getElementById('setSave').onclick = saveAll
+  document.getElementById('setClose').onclick = () => dlg.close()
+  document.getElementById('setReport').textContent =
+`curl -X POST ${location.origin}/api/report -H "content-type: application/json" \\
+  -d '{"agent":"DeepSeek","id":"run-1","title":"Fix login","state":"working","text":"reading auth.ts"}'`
+})()
+
 function seg(id, key) {
   const el = document.getElementById(id)
   const sync = () => el.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === S[key]))

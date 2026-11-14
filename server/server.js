@@ -8,6 +8,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
 const { spawn } = require('node:child_process')
+const custom = require('./custom')
 
 const PORT = Number(process.env.HRLESS_PORT || 4777)
 const URL_ = `http://127.0.0.1:${PORT}`
@@ -64,8 +65,8 @@ function claudeText(content) {
   if (!Array.isArray(content)) return ''
   return content.filter(b => b.type === 'text').map(b => b.text).join(' ')
 }
-// A Bash call that starts an agy or Codex agent: its window is when that agent's conversation was born.
-const CLI_RE = /(^|[\s;&|(])(agy|codex)(\.exe|\.cmd)?\s+(?!--?(version|help)\b)/
+// A shell call that runs one of `names` (agy, codex, or a custom agent's command): not `--version`/`--help`.
+const cliRe = names => new RegExp(`(^|[\\s;&|(])(${names.map(n => n.replace(/[.+]/g, '\\$&')).join('|')})(\\.exe|\\.cmd|\\.ps1)?(\\s+(?!--?(version|help)\\b)|$)`)
 
 // Transcripts only grow, so each is read once and then only its new bytes (whole, not a tail:
 // the Agent and Bash calls that tie agents together can be anywhere in it).
@@ -74,7 +75,7 @@ function scanClaude(file) {
   const st = stat(file); if (!st) return null
   let c = scans.get(file)
   if (!c || st.size < c.pos) {
-    c = { pos: 0, rest: '', d: { title: '', cwd: '', model: '', prompt: '', events: [], agentCalls: new Set(), cli: [], open: new Map(), start: 0 } }
+    c = { pos: 0, rest: '', d: { title: '', cwd: '', model: '', prompt: '', events: [], agentCalls: new Set(), bash: [], open: new Map(), start: 0 } }
     scans.set(file, c)
   }
   if (st.size > c.pos) {
@@ -115,9 +116,9 @@ function claudeRecord(d, r) {
       push({ kind: 'tool', text: toolLine(b.name, b.input) })
       if (b.name === 'Agent' || b.name === 'Task') d.agentCalls.add(b.id)
       const cmd = b.input?.command
-      if (b.name === 'Bash' && typeof cmd === 'string' && CLI_RE.test(cmd)) {
-        const call = { start: ts, end: 0, bg: !!b.input.run_in_background }
-        d.cli.push(call); d.open.set(b.id, call)
+      if ((b.name === 'Bash' || b.name === 'PowerShell') && typeof cmd === 'string') {
+        const call = { cmd: cmd.slice(0, 2000), start: ts, end: 0 }
+        d.bash.push(call); d.open.set(b.id, call)
       }
     }
   }
@@ -162,20 +163,29 @@ function collectClaude(since, only) {
   return out
 }
 
-// Hang each agy or Codex agent under the Claude agent whose `agy -p` / `codex exec` call was running when it was born.
+// Hang each outside agent (agy, Codex, custom) under the Claude agent whose shell call to its
+// command (`agy -p`, `codex exec`, `deepseek ...`) was running when it was born.
 function adoptCli(trees, externals) {
   const calls = []
-  for (const t of trees) for (const n of t.all) for (const c of n._d.cli) calls.push([n, c])
+  for (const t of trees) for (const n of t.all) for (const c of n._d.bash) calls.push([n, c])
+  const res = new Map()
   const left = []
   for (const x of externals) {
-    let best = null, gap = Infinity
+    if (!x.cli?.length) { left.push(x); continue }
+    const key = x.cli.join('|'); if (!res.has(key)) res.set(key, cliRe(x.cli))
+    const re = res.get(key)
+    let best = null, bestCall = null, gap = Infinity
     for (const [n, c] of calls) {
+      if (!re.test(c.cmd)) continue
       // A call with no result yet is open only as long as its caller is still writing.
       const end = Math.max(c.end || n._d.mtime, c.start + 30000)
       if (x.start >= c.start - 3000 && x.start <= end + 3000) {
-        const g = Math.abs(x.start - c.start); if (g < gap) { best = n; gap = g }
+        const g = Math.abs(x.start - c.start); if (g < gap) { best = n; bestCall = c; gap = g }
       }
     }
+    // The command names the model (`agy -p ... --model gemini-3.8-flash-high`) when the agent's own files do not.
+    const mm = bestCall && bestCall.cmd.match(/(?:--model|-m)[\s=]+["']?([\w.:\-]+)/)
+    if (mm && (!x.model || x.model === 'gemini')) x.model = mm[1]
     if (best) best.children.push(x); else left.push(x)
   }
   return left
@@ -185,7 +195,7 @@ function settle(n) {
   for (const c of n.children) settle(c)
   n.children.sort((x, y) => y.mtime - x.mtime)
   n.mtime = Math.max(n.mtime, ...n.children.map(c => c.mtime))
-  delete n._d; delete n._call; delete n.start
+  delete n._d; delete n._call; delete n.start; delete n.cli; delete n._parent
   return n
 }
 
@@ -208,7 +218,7 @@ function collectCodex(since) {
     const head = headJson(file)?.payload || {}
     const id = head.id || head.session_id || path.basename(file)
     const spawnInfo = head.source?.subagent?.thread_spawn
-    const a = { start: Date.parse(head.timestamp || '') || mtime, id, tool: 'codex', kind: spawnInfo ? (spawnInfo.agent_role || 'subagent') : head.thread_source === 'guardian_review' ? 'guardian' : 'thread',
+    const a = { cli: ['codex'], start: Date.parse(head.timestamp || '') || mtime, id, tool: 'codex', kind: spawnInfo ? (spawnInfo.agent_role || 'subagent') : head.thread_source === 'guardian_review' ? 'guardian' : 'thread',
       title: spawnInfo?.agent_nickname ? `${spawnInfo.agent_nickname} · ${spawnInfo.agent_path || ''}` : '', cwd: head.cwd || '', model: '',
       prompt: '', events: [], mtime, parent: spawnInfo?.parent_thread_id || head.parent_thread_id || null, children: [], done: false }
     for (const r of tailJson(file)) {
@@ -273,7 +283,7 @@ function collectAgy(since) {
     const mtime = Math.max(...[f, f + '-wal'].map(x => stat(path.join(dir, x))?.mtimeMs || 0))
     if (mtime < since) continue
     const h = hist.get(id)
-    const a = { start: stat(path.join(dir, f))?.birthtimeMs || mtime, id, tool: 'agy', kind: 'conversation', title: '', cwd: h?.workspace || '', model: 'gemini', prompt: '', events: [], mtime, children: [], parent: null }
+    const a = { cli: ['agy'], start: stat(path.join(dir, f))?.birthtimeMs || mtime, id, tool: 'agy', kind: 'conversation', title: '', cwd: h?.workspace || '', model: 'gemini', prompt: '', events: [], mtime, children: [], parent: null }
     if (sqlite) {
       let db
       try {
@@ -318,11 +328,17 @@ function snapshot(hours, session) {
   // agy and Codex agents are looked up over a week, so one started long ago by this session still finds its parent.
   const extSince = session ? Date.now() - 7 * 86400000 : since
   const trees = safe(() => collectClaude(since, session))
-  const left = adoptCli(trees, [...safe(() => collectCodex(extSince)), ...safe(() => collectAgy(extSince))])
+  // Custom agents first find a parent they name themselves (another of theirs, or any agent's id).
+  const mine = safe(() => custom.collectCustom(extSince, state))
+  const byId = new Map()
+  for (const t of trees) for (const n of t.all) byId.set(n.id, n)
+  for (const n of mine) byId.set(n.id, n)
+  const loose = mine.filter(n => { const p = n._parent && byId.get(n._parent); if (p && p !== n) { p.children.push(n); return false } return true })
+  const left = adoptCli(trees, [...safe(() => collectCodex(extSince)), ...safe(() => collectAgy(extSince)), ...loose])
   const roots = session ? trees.map(t => t.root) : [...trees.map(t => t.root), ...left]
   const agents = roots.map(settle).sort((x, y) => y.mtime - x.mtime)
   left.forEach(settle)
-  return { now: Date.now(), hours, session: session || null, agents }
+  return { now: Date.now(), hours, session: session || null, sources: custom.sources(), agents }
 }
 
 // --session <id>: open on that Claude session's own tree.
@@ -335,7 +351,21 @@ function openBrowser() {
 
 // Read per request, so an edited page shows on refresh without restarting the server.
 const page = () => fs.readFileSync(path.join(__dirname, 'index.html'))
+const json = (res, code, v) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(v)) }
+// JSON bodies only (a cross-site form cannot send one without a preflight we never answer), 64 KB at most.
+function body(req) {
+  return new Promise((ok, fail) => {
+    if (!/^application\/json\b/.test(req.headers['content-type'] || '')) return fail(new Error('content-type must be application/json'))
+    let s = ''
+    req.on('data', d => { s += d; if (s.length > 65536) { fail(new Error('too large')); req.destroy() } })
+    req.on('end', () => { try { ok(JSON.parse(s || '{}')) } catch { fail(new Error('invalid JSON')) } })
+  })
+}
+const HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`, `[::1]:${PORT}`])
+const sameOrigin = req => !req.headers.origin || HOSTS.has(req.headers.origin.replace(/^https?:\/\//, ''))
 const server = http.createServer((req, res) => {
+  // A page on another site that rebinds its name to 127.0.0.1 still sends its own Host: refuse it.
+  if (!HOSTS.has(req.headers.host || '')) { res.writeHead(403); return res.end() }
   const u = new URL(req.url, URL_)
   if (u.pathname === '/api/agents') {
     const hours = Math.min(168, Math.max(0.1, Number(u.searchParams.get('hours')) || 24))
@@ -344,6 +374,15 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify(snapshot(hours, session)))
   }
   if (u.pathname === '/api/ping') { res.writeHead(200); return res.end('hrless') }
+  if (u.pathname === '/api/config' && req.method === 'GET') return json(res, 200, { path: custom.CONFIG, ...custom.loadConfig() })
+  // Writes come from this page or from a local tool (curl, a hook); never from another website.
+  if ((u.pathname === '/api/config' && req.method === 'PUT') || (u.pathname === '/api/report' && req.method === 'POST')) {
+    if (!sameOrigin(req)) return json(res, 403, { error: 'forbidden' })
+    return body(req).then(b => {
+      try { json(res, 200, u.pathname === '/api/report' ? custom.report(b) : custom.saveConfig(b)) }
+      catch (e) { json(res, 400, { error: String(e.message || e) }) }
+    }, e => json(res, 400, { error: String(e.message || e) }))
+  }
   if (u.pathname === '/') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(page()) }
   res.writeHead(404); res.end()
 })
