@@ -274,6 +274,17 @@ let sqlite = null
 try { sqlite = require('node:sqlite') } catch {}
 // Step payloads are protobuf; the readable runs inside are enough to say what it did.
 const runs = buf => Buffer.from(buf || []).toString('utf8').split(/[\x00-\x1f�]+/).map(s => s.trim()).filter(s => s.length > 2)
+// A step's metadata is protobuf holding its timestamps (seconds as varints): the latest plausible one, in ms.
+function stepTime(buf) {
+  const b = Buffer.from(buf || []), max = Date.now() / 1000 + 86400
+  let best = 0
+  for (let i = 0; i < b.length; i++) {
+    let v = 0, sh = 0
+    for (let j = i; j < b.length && j < i + 6; j++) { v += (b[j] & 127) * 2 ** sh; sh += 7; if (!(b[j] & 128)) break }
+    if (v > 1.7e9 && v < max && v > best) best = v
+  }
+  return best * 1000
+}
 function agyHistory() {
   const map = new Map()
   for (const r of tailJson(path.join(AGY, 'history.jsonl'), 512 * 1024)) {
@@ -304,8 +315,9 @@ function collectAgy(since) {
         if (ws && !a.cwd) a.cwd = decodeURIComponent(ws[1])
         const parentRef = db.prepare('select data from parent_references limit 1').get()
         if (parentRef) { const m = runs(parentRef.data).join(' ').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/); if (m && m[0] !== id) a.parent = m[0] }
-        const steps = db.prepare('select idx, step_type, step_payload from steps order by idx desc limit 40').all().reverse()
+        const steps = db.prepare('select idx, step_type, step_payload, metadata from steps order by idx desc limit 40').all().reverse()
         for (const s of steps) {
+          const t = stepTime(s.metadata); if (t > (a.real || 0)) a.real = t
           const r = runs(s.step_payload)
           // The typed prompt is the first readable run with a space; the long ones after it are injected instructions.
           if (s.step_type === 14) { const t = (r.find(x => /\s/.test(x)) || '').replace(/^\/\w+\s+/, ''); if (t) { if (!a.first) a.first = t; a.prompt = t; a.events.push({ kind: 'prompt', text: clip(t) }) } }
@@ -326,7 +338,11 @@ function collectAgy(since) {
     a.prompt = clip(a.prompt, 400); a.events = a.events.slice(-8); delete a.first
     return a
     })
-    out.push({ ...b, children: [], state: state(mtime) })
+    // agy rewrites every conversation file when it starts, so a file's time says nothing:
+    // the last step's own time does (or, for one with no step yet, when it was created).
+    const t = b.real || b.start || mtime
+    if (t < since) continue
+    out.push({ ...b, mtime: t, children: [], state: state(t) })
   }
   const byId = new Map(out.map(a => [a.id, a])); const roots = []
   for (const a of out) { const p = a.parent && byId.get(a.parent); if (p) p.children.push(a); else roots.push(a) }
