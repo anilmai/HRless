@@ -477,12 +477,11 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify(snapshot(hours, session)))
   }
   if (u.pathname === '/api/ping') { res.writeHead(200); return res.end('hrless') }
-  if (u.pathname === '/api/config' && req.method === 'GET') return json(res, 200, { path: custom.CONFIG, ...custom.loadConfig() })
-  // Writes come from this page or from a local tool (curl, a hook); never from another website.
-  if ((u.pathname === '/api/config' && req.method === 'PUT') || (u.pathname === '/api/report' && req.method === 'POST')) {
+  // Agents report themselves here (HRLESS.md): from a local tool, never from another website.
+  if (u.pathname === '/api/report' && req.method === 'POST') {
     if (!sameOrigin(req)) return json(res, 403, { error: 'forbidden' })
     return body(req).then(b => {
-      try { json(res, 200, u.pathname === '/api/report' ? custom.report(b) : custom.saveConfig(b)) }
+      try { json(res, 200, custom.report(b)) }
       catch (e) { json(res, 400, { error: String(e.message || e) }) }
     }, e => json(res, 400, { error: String(e.message || e) }))
   }

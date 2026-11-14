@@ -33,26 +33,11 @@ Requires: Node.js 22.5 or newer on `PATH` (agy conversations are read with `node
 
 ## Custom agents
 
-The person icon in the toolbar opens **Your agents**. Add any agent HRless does not know yet, such as DeepSeek or Aider. Each agent has:
+Claude Code, Codex and agy are tracked on their own. Any other agent (DeepSeek, Aider, your own bot) adds itself: [HRLESS.md](HRLESS.md) tells an AI agent how to report its name, model and progress. The person icon in the toolbar shows a one-line instruction to paste into that agent's `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` or system prompt; there is nothing to fill in.
 
-- **Name:** shown on its cards, in the filters and on the graph.
-- **Colour:** the colour of its balls and tag.
-- **Command:** the command that starts it, for example `deepseek`. When a Claude agent runs that command from Bash or PowerShell, the new conversation hangs under that Claude agent.
-- **Session files:** a glob for the files the agent writes its conversations to, for example `~/.deepseek/sessions/**/*.jsonl`. JSON Lines files and JSON chat logs with role/content or OpenAI tool_calls are read. `~`, `*`, `?` and `**` work. Session files with OpenAI-style `usage` (prompt_tokens/completion_tokens/total_tokens) or Anthropic-style (input_tokens/output_tokens) fields are counted.
+An agent that reports the `command` it was started with (`deepseek`) hangs under the Claude agent whose Bash or PowerShell call ran that command. Reports go to `POST /api/report`, which accepts requests from this machine only, never from another website.
 
-Settings are saved to `~/.hrless/config.json` (set `HRLESS_CONFIG` to use another path). Example:
-
-```json
-{ "agents": [ { "name": "DeepSeek", "color": "#4d6bfe", "cli": ["deepseek"], "logs": "~/.deepseek/sessions/**/*.jsonl" } ] }
-```
-
-An agent with no session files can report what it is doing itself. The endpoint accepts requests from localhost only, and only when they carry no foreign Origin:
-
-```bash
-curl -X POST http://127.0.0.1:4777/api/report -H "content-type: application/json" -d '{"agent":"DeepSeek","id":"run-1","parent":"<claude session or agent id>","title":"Fix login","state":"working","text":"reading auth.ts"}'
-```
-
-Fields: `agent` (required), `id`, `parent`, `title`, `prompt`, `text`, `kind` (`tool`, `say` or `prompt`), `model`, `cwd`, `state` (`working` or `done`), `tokens` (the run's total so far, a number).
+An agent that already saves its conversations as JSON or JSON Lines files can be read from them instead, through `~/.hrless/config.json` (`HRLESS_CONFIG` to use another path); HRLESS.md has the format. OpenAI-style (`prompt_tokens`/`completion_tokens`) and Anthropic-style (`input_tokens`/`output_tokens`) usage fields in those files are counted.
 
 ## Where it reads from
 

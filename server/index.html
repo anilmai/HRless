@@ -161,16 +161,11 @@ dialog#settings::backdrop{background:rgba(0,0,0,.55)}
 dialog#settings h2{font:700 18px/1.3 var(--font);letter-spacing:-.015em;margin:0 0 6px}
 .sdesc{color:var(--dim);font-size:13px;font-weight:400;margin:6px 0 12px}
 .sdesc b{color:var(--text);font-weight:600}
-.sdesc code,#setPath{font-family:var(--mono);font-size:12px}
+.sdesc code{font-family:var(--mono);font-size:12px}
 .sdesc pre{background:var(--sunk);border-radius:var(--r-md);padding:9px 11px;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 var(--mono)}
-.srow{display:grid;grid-template-columns:1.1fr 38px 1fr 2fr 34px;gap:6px;margin-bottom:6px}
-.srow input{height:34px;border:1px solid var(--line);background:var(--bg);border-radius:var(--r-md);padding:0 9px;font-size:13px;min-width:0}
-.srow input[type=color]{padding:3px}
-.srow .del,.link,.sfoot button{height:34px;border:1px solid var(--line);background:transparent;color:var(--dim);border-radius:var(--r-md);cursor:pointer;font-size:13px;padding:0 12px;transition:color var(--t-fast),background var(--t-fast)}
-.srow .del{padding:0;display:grid;place-items:center}
-.srow .del .ic{width:15px;height:15px}
-.srow .del:hover,.link:hover,.sfoot button:hover{color:var(--text);background:var(--sunk)}
-.link{border-style:dashed}
+#setLine{background:var(--sunk);border:1px solid var(--line);border-radius:var(--r-md);padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.55 var(--mono);user-select:all}
+.sfoot button{height:34px;border:1px solid var(--line);background:transparent;color:var(--dim);border-radius:var(--r-md);cursor:pointer;font-size:13px;padding:0 12px;transition:color var(--t-fast),background var(--t-fast)}
+.sfoot button:hover{color:var(--text);background:var(--sunk)}
 .sfoot{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px}
 .sfoot #setMsg{flex:1;color:var(--idle);font-size:13px}
 .sfoot .primary{background:var(--inv);color:var(--on-inv);border-color:var(--inv)}
@@ -183,7 +178,7 @@ dialog#settings h2{font:700 18px/1.3 var(--font);letter-spacing:-.015em;margin:0
   #graph{height:calc(100vh - 150px)}
   .side{max-height:42%}
   .legend{width:150px;top:auto;bottom:12px;padding:8px 10px}.legend .hint{display:none}
-  .srow{grid-template-columns:1fr 38px 34px}.srow .cli,.srow .logs{grid-column:1/-1}}
+}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
 </head>
@@ -211,7 +206,7 @@ dialog#settings h2{font:700 18px/1.3 var(--font);letter-spacing:-.015em;margin:0
   <div class="seg" id="range" role="group" aria-label="Time range">
     <button data-v="0.5" aria-pressed="true">Active</button><button data-v="24">24 h</button><button data-v="168">7 d</button>
   </div>
-  <button class="icon" id="setBtn" title="Your agents" aria-label="Your agents"><svg class="ic" aria-hidden="true"><use href="#i-agents"/></svg></button>
+  <button class="icon" id="setBtn" title="Add an agent" aria-label="Add an agent"><svg class="ic" aria-hidden="true"><use href="#i-agents"/></svg></button>
   <button class="icon" id="viewBtn" aria-pressed="false" title="Graph view" aria-label="Graph view"><svg class="ic" aria-hidden="true"><use id="viewIcon" href="#i-graph"/></svg></button>
 </div></header>
 <main id="list"><div class="empty">Loading…</div></main>
@@ -226,17 +221,13 @@ dialog#settings h2{font:700 18px/1.3 var(--font);letter-spacing:-.015em;margin:0
   <div class="info panel" id="info"></div>
 </section>
 <dialog id="settings" aria-labelledby="setTitle">
-  <h2 id="setTitle">Your agents</h2>
-  <p class="sdesc">Add any agent HRless does not know yet (DeepSeek, Aider, your own bot). It shows under its own name and colour.
-    <b>Command</b>: when a Claude agent runs it from the shell, the new conversation hangs under that Claude agent.
-    <b>Session files</b>: where the agent writes its conversations (JSON Lines or JSON chat logs); <code>~</code>, <code>*</code> and <code>**</code> work.</p>
-  <div id="setRows"></div>
-  <button id="setAdd" class="link">+ Add agent</button>
-  <details class="sdesc"><summary>No session files? Report from the agent itself</summary>
-    <p>Any script, hook or wrapper can tell HRless what it is doing. Optional fields: <code>parent</code> (the id of the agent that started it), <code>prompt</code>, <code>model</code>, <code>cwd</code>, <code>kind</code> (tool / say / prompt), <code>state</code> (working / done).</p>
-    <pre id="setReport"></pre></details>
-  <p class="sdesc">Saved to <code id="setPath"></code></p>
-  <div class="sfoot"><span id="setMsg" role="status"></span><button id="setClose">Cancel</button><button id="setSave" class="primary">Save</button></div>
+  <h2 id="setTitle">Add an agent</h2>
+  <p class="sdesc">Claude Code, Codex and agy show up on their own. Any other agent (DeepSeek, Aider, your own bot) adds itself:
+    paste this line into its instruction file (<code>AGENTS.md</code>, <code>CLAUDE.md</code>, <code>GEMINI.md</code> or its system prompt).
+    It then reports its own name, model and work, and hangs under the Claude agent that started it.</p>
+  <pre id="setLine"></pre>
+  <p class="sdesc" id="setKnown"></p>
+  <div class="sfoot"><span id="setMsg" role="status"></span><button id="setClose">Close</button><button id="setCopy" class="primary">Copy line</button></div>
 </dialog>
 <script>
 // Opened from a session's HRless button: ?session=<id> shows only that session's agent tree.
@@ -654,47 +645,21 @@ function syncTools() {
   }
 }
 
-// ---------- settings: the user's own agents ----------
-const Settings = (() => {
-  const dlg = document.getElementById('settings'), rows = document.getElementById('setRows'), msg = document.getElementById('setMsg')
-  const row = (a = {}) => {
-    const r = document.createElement('div'); r.className = 'srow'
-    r.innerHTML = `<input class="nm" placeholder="Name (e.g. DeepSeek)" value="${esc(a.name || '')}" aria-label="Name">
-      <input type="color" value="${esc(a.color || '#4d6bfe')}" aria-label="Colour">
-      <input class="cli" placeholder="Command (e.g. deepseek)" value="${esc((a.cli || []).join(' '))}" aria-label="Command">
-      <input class="logs" placeholder="Session files, e.g. ~/.deepseek/sessions/**/*.jsonl" value="${esc(a.logs || '')}" aria-label="Session files">
-      <button class="del" aria-label="Remove" title="Remove">×</button>`
-    r.querySelector('.del').onclick = () => r.remove()
-    rows.append(r)
-  }
-  async function open() {
-    msg.textContent = ''; rows.innerHTML = ''
-    try {
-      const c = await (await fetch('/api/config', { cache: 'no-store' })).json()
-      document.getElementById('setPath').textContent = c.path
-      c.agents.forEach(row)
-    } catch { msg.textContent = 'Could not read the settings.' }
-    if (!rows.children.length) row()
+// ---------- add an agent: agents register themselves by following HRLESS.md ----------
+const LINE = `HRless (local agent dashboard): while you work, report your name, model and progress to ${location.origin}/api/report as described in https://github.com/anilmai/HRless/blob/main/HRLESS.md`
+;(() => {
+  const dlg = document.getElementById('settings'), msg = document.getElementById('setMsg')
+  document.getElementById('setLine').textContent = LINE
+  document.getElementById('setBtn').onclick = () => {
+    msg.textContent = ''
+    const own = Object.values(S.data?.sources || {}).filter(s => !['Claude', 'Codex', 'agy'].includes(s.name)).map(s => s.name)
+    document.getElementById('setKnown').textContent = own.length ? 'Already reporting: ' + own.join(', ') + '.' : ''
     dlg.showModal()
   }
-  async function saveAll() {
-    const agents = [...rows.children].map(r => ({
-      name: r.querySelector('.nm').value.trim(), color: r.querySelector('[type=color]').value,
-      cli: r.querySelector('.cli').value.trim().split(/[\s,]+/).filter(Boolean), logs: r.querySelector('.logs').value.trim(),
-    })).filter(a => a.name)
-    try {
-      const res = await fetch('/api/config', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ agents }) })
-      if (!res.ok) throw new Error((await res.json()).error)
-      dlg.close(); toolsKey = ''; load()
-    } catch (e) { msg.textContent = 'Not saved: ' + e.message }
+  document.getElementById('setCopy').onclick = async () => {
+    try { await navigator.clipboard.writeText(LINE); msg.textContent = 'Copied.' } catch { msg.textContent = 'Select the line and copy it.' }
   }
-  document.getElementById('setBtn').onclick = open
-  document.getElementById('setAdd').onclick = () => row()
-  document.getElementById('setSave').onclick = saveAll
   document.getElementById('setClose').onclick = () => dlg.close()
-  document.getElementById('setReport').textContent =
-`curl -X POST ${location.origin}/api/report -H "content-type: application/json" \\
-  -d '{"agent":"DeepSeek","id":"run-1","title":"Fix login","state":"working","text":"reading auth.ts"}'`
 })()
 
 function seg(id, key) {

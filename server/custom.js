@@ -1,6 +1,6 @@
 'use strict'
-// Agents HRless does not know out of the box (DeepSeek, Aider, an in-house bot...), added by the user.
-//
+// Agents HRless does not know out of the box (DeepSeek, Aider, an in-house bot...). They add
+// themselves by following HRLESS.md: a report over HTTP, or an entry in
 // ~/.hrless/config.json (or HRLESS_CONFIG):
 // { "agents": [ { "name": "DeepSeek", "color": "#4d6bfe", "cli": ["deepseek"],
 //                 "logs": "~/.deepseek/sessions/**/*.jsonl" } ] }
@@ -8,7 +8,7 @@
 // Each agent is shown under its own name and colour. Two ways in, either or both:
 //  - `logs`: a glob of session files (JSON Lines, or JSON with a messages array). Each file is one
 //    conversation; the reader understands the common chat shapes (role/content, OpenAI tool_calls).
-//  - POST /api/report: an agent, hook or wrapper tells HRless what it is doing (see README).
+//  - POST /api/report: the agent, a hook or a wrapper tells HRless what it is doing (HRLESS.md).
 // `cli` names the command that starts the agent: a run of it from a Claude agent's Bash or
 // PowerShell call hangs the new conversation under that Claude agent.
 const fs = require('node:fs')
@@ -61,14 +61,6 @@ function loadConfig() {
     catch { cache = { mtime: st.mtimeMs, cfg: { agents: [] } } }
   }
   return cache.cfg
-}
-function saveConfig(raw) {
-  // The settings panel sends agents only: prices written by hand in the file are kept.
-  const cfg = clean({ prices: loadConfig().prices, ...raw })
-  fs.mkdirSync(path.dirname(CONFIG), { recursive: true })
-  const out = { agents: cfg.agents.map(({ key, ...a }) => a), ...(Object.keys(cfg.prices).length ? { prices: cfg.prices } : {}) }
-  fs.writeFileSync(CONFIG, JSON.stringify(out, null, 2) + '\n')
-  return cfg
 }
 
 // ---------- logs ----------
@@ -175,6 +167,8 @@ function report(body) {
   if (body.prompt) { r.prompt = clip(body.prompt, 400); r.events.push({ kind: 'prompt', text: clip(body.prompt) }) }
   if (body.text) r.events.push({ kind: body.kind === 'tool' ? 'tool' : body.kind === 'prompt' ? 'prompt' : 'say', text: clip(body.text) })
   r.done = body.state === 'done' ? true : body.state === 'working' ? false : r.done
+  // The command it was started with: a Claude agent's shell call to it then adopts it (see HRLESS.md).
+  if (typeof body.command === 'string' && CMD.test(body.command)) r.cli = [body.command]
   r.events = r.events.slice(-8)
   reports.set(id, r)
   if (reports.size > 500) reports.delete(reports.keys().next().value)
@@ -201,7 +195,7 @@ function collectCustom(since, state) {
     const ag = cfg.agents.find(a => a.key === r.key)
     nodes.push({ id: r.id, tool: r.key, kind: r.name, title: r.title || clip(r.prompt, 80) || r.id, cwd: r.cwd || '', model: r.model || '',
       prompt: r.prompt || '', events: r.events, mtime: r.mtime, state: state(r.mtime, r.done), children: [], tokens: r.tokens || 0, start: r.start,
-      cli: ag ? ag.cli : [], _parent: r.parent || null })
+      cli: r.cli || (ag ? ag.cli : []), _parent: r.parent || null })
   }
   return nodes
 }
@@ -214,4 +208,4 @@ function sources() {
   return out
 }
 
-module.exports = { CONFIG, loadConfig, saveConfig, report, collectCustom, sources }
+module.exports = { CONFIG, loadConfig, report, collectCustom, sources }
