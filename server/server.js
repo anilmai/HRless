@@ -476,6 +476,12 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
     return res.end(JSON.stringify(snapshot(hours, session)))
   }
+  // The token card's own range (24 h … all): only what it sums, so a long range stays a small answer.
+  if (u.pathname === '/api/tokens') {
+    const hours = Math.max(0.1, Number(u.searchParams.get('hours')) || 24)
+    const slim = a => ({ tool: a.tool, kind: a.kind, tokens: a.tokens, cost: a.cost, children: a.children.map(slim) })
+    return json(res, 200, snapshot(hours).agents.map(slim))
+  }
   if (u.pathname === '/api/ping') { res.writeHead(200); return res.end('hrless') }
   // Agents report themselves here (HRLESS.md): from a local tool, never from another website.
   if (u.pathname === '/api/report' && req.method === 'POST') {

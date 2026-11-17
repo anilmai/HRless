@@ -128,6 +128,8 @@ body.graph #graph{display:block}
 .story .now .ic{width:15px;height:15px;vertical-align:-3px;margin-right:5px;color:var(--idle)}
 .story .wait::after{content:'';display:inline-block;width:1.2em;text-align:left;animation:dots 1.4s steps(4) infinite}
 @keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+.tokens .seg{margin:2px 0 10px;width:max-content;max-width:100%;flex-wrap:wrap}
+.tokens .seg button{padding:0 9px;height:26px;font-size:12px}
 .tokens .kpi{display:flex;align-items:baseline;gap:8px;margin:2px 0 10px}
 .tokens .kpi .num{font-size:30px;font-weight:500;line-height:1.05;letter-spacing:-.015em}
 .tokens .kpi span:last-child{color:var(--faint);font-size:12px}
@@ -233,10 +235,10 @@ dialog#settings h2{font:700 18px/1.3 var(--font);letter-spacing:-.015em;margin:0
 // Opened from a session's HRless button: ?session=<id> shows only that session's agent tree.
 const SESSION = new URLSearchParams(location.search).get('session')
 const VIEW_KEY = SESSION ? 'viewFocus' : 'view'
-const S = { tool: 'all', hours: '0.5', q: '', view: SESSION ? 'graph' : 'list', open: new Set(), data: null }
-try { const s = JSON.parse(localStorage.getItem('hrless') || '{}'); for (const k of ['tool', 'hours']) if (s[k]) S[k] = s[k]; if (s[VIEW_KEY] && !SESSION) S.view = s[VIEW_KEY] } catch {}
+const S = { tool: 'all', hours: '0.5', tokHours: '24', tokSess: 's', tok: null, q: '', view: SESSION ? 'graph' : 'list', open: new Set(), data: null }
+try { const s = JSON.parse(localStorage.getItem('hrless') || '{}'); for (const k of ['tool', 'hours', 'tokHours']) if (s[k]) S[k] = s[k]; if (s[VIEW_KEY] && !SESSION) S.view = s[VIEW_KEY] } catch {}
 // The HRless button always lands on the graph; the list stays one click away.
-const save = () => { try { const s = JSON.parse(localStorage.getItem('hrless') || '{}'); localStorage.setItem('hrless', JSON.stringify({ ...s, tool: S.tool, hours: S.hours, [VIEW_KEY]: S.view })) } catch {} }
+const save = () => { try { const s = JSON.parse(localStorage.getItem('hrless') || '{}'); localStorage.setItem('hrless', JSON.stringify({ ...s, tool: S.tool, hours: S.hours, tokHours: S.tokHours, [VIEW_KEY]: S.view })) } catch {} }
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 const STATE = { working: 'working', idle: 'idle', done: 'done' }
 const KIND = { prompt: 'prompt', tool: 'tool', say: 'reply' }
@@ -540,8 +542,13 @@ const Graph = (() => {
   // Tokens every agent here burned (input + output + cache reads and writes, as Ponytail counts them),
   // hidden and finished ones included: All first, then each tool, the hungriest on top.
   // Dollars: what the tokens cost at each model's API price (the server prices them; null = no known price).
+  // The card has its own range tabs; one session's view adds a first tab for that session alone.
+  const TOK_RANGES = [['24', '24 h'], ['168', '7 d'], ['720', '30 d'], ['2160', '90 d'], ['1e7', 'All']]
   function tokens(list) {
     const el = document.getElementById('tokens')
+    const k = tokKey(), own = k === 's'
+    if (!own) list = S.tok || []
+    const tabs = `<div class="seg" role="group" aria-label="Token time range">${(SESSION ? [['s', 'This session'], ...TOK_RANGES] : TOK_RANGES).map(([v, t]) => `<button data-v="${v}" aria-pressed="${v === k}">${t}</button>`).join('')}</div>`
     const by = new Map(); let total = 0, n = 0, usd = 0, unpriced = 0
     const walk = a => {
       if (a.kind !== 'group') {
@@ -555,13 +562,19 @@ const Graph = (() => {
     list.forEach(walk)
     const rows = [...by].filter(([, v]) => v.t > 0).sort((x, y) => y[1].t - x[1].t)
     const money = (r) => r.t && r.unpriced === r.t ? '<span class="na" title="No price known for this model">no price</span>' : fmtUsd(r.usd) + (r.unpriced ? '<sup title="Some of these tokens have no known price">*</sup>' : '')
-    el.innerHTML = `<div class="cap"><svg class="ic" aria-hidden="true"><use href="#i-tokens"/></svg>Tokens burned</div>
+    el.innerHTML = `<div class="cap"><svg class="ic" aria-hidden="true"><use href="#i-tokens"/></svg>Tokens burned</div>${tabs}
       <div class="kpi"><span class="num">${fmtTok(total)}</span><span class="usd num">${fmtUsd(usd)}${unpriced ? '<sup>*</sup>' : ''}</span><span>All · ${n} agent${n === 1 ? '' : 's'}</span></div>
       <ol>${rows.map(([t, v]) => { const c = color(MAIN[t] || t + ':x')
         return `<li><span class="sw" style="background:${c}"></span><span class="nm">${esc(toolName(t))}</span><span class="v">${fmtTok(v.t)}<span class="d">${money(v)}</span></span>
-          <span class="meter" role="img" aria-label="${esc(toolName(t))}: ${Math.round(v.t / total * 100)}% of all tokens"><i style="width:${Math.max(.6, v.t / (total || 1) * 100)}%"></i></span></li>` }).join('') || '<li><span></span><span class="nm">No usage yet</span><span></span></li>'}</ol>
-      <p class="note">Dollars are API list prices (cache reads included), not what a subscription bills.${unpriced ? ` * ${fmtTok(unpriced)} tokens have no known price; add one under "prices" in ~/.hrless/config.json.` : ''} agy's count is read from its own files and is close, not exact.</p>`
+          <span class="meter" role="img" aria-label="${esc(toolName(t))}: ${Math.round(v.t / total * 100)}% of all tokens"><i style="width:${Math.max(.6, v.t / (total || 1) * 100)}%"></i></span></li>` }).join('') || `<li><span></span><span class="nm">${!own && !S.tok ? 'Loading…' : 'No usage yet'}</span><span></span></li>`}</ol>
+      <p class="note">Dollars are API list prices (cache reads included), not what a subscription bills.${own ? '' : ' A session that worked in the range counts in full.'}${unpriced ? ` * ${fmtTok(unpriced)} tokens have no known price; add one under "prices" in ~/.hrless/config.json.` : ''} agy's count is read from its own files and is close, not exact.</p>`
   }
+
+  document.getElementById('tokens').addEventListener('click', e => {
+    const b = e.target.closest('button[data-v]'); if (!b || b.dataset.v === tokKey()) return
+    if (SESSION) S.tokSess = b.dataset.v; else { S.tokHours = b.dataset.v; save() }
+    S.tok = null; render(); loadTokens(true)
+  })
 
   function legend() {
     const counts = new Map()
@@ -630,6 +643,16 @@ async function load() {
   } catch { document.getElementById('list').innerHTML = '<div class="empty">Could not reach the server. Press the HRless button in Claude Code again.</div>' }
   finally { loading = false }
 }
+// The token card's range is read on its own, every 15 s at most: a long range is a big read.
+let tokAt = 0
+// One session's view opens on that session's own count; its other tabs count every session.
+const tokKey = () => SESSION ? S.tokSess : S.tokHours
+async function loadTokens(now) {
+  if (tokKey() === 's' || (!now && Date.now() - tokAt < 15000)) return
+  tokAt = Date.now(); const h = tokKey()
+  try { const r = await fetch('/api/tokens?hours=' + h, { cache: 'no-store' }); const t = await r.json(); if (h === tokKey()) { S.tok = t; render() } }
+  catch { tokAt = 0 }
+}
 // One filter button per custom agent the user added, after the built-in ones.
 let toolsKey = ''
 function syncTools() {
@@ -690,7 +713,7 @@ if (SESSION) {
   document.getElementById('range').hidden = true
   const sc = document.getElementById('scope'); sc.hidden = false; sc.href = '/'; sc.textContent = 'This session · see all'
 }
-load(); setInterval(load, 3000)
+load(); setInterval(load, 3000); loadTokens(); setInterval(loadTokens, 3000)
 </script>
 </body>
 </html>
