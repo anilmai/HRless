@@ -49,6 +49,15 @@ header{background:#142521;color:#f3f8f4}
 .toolbar{padding:12px 0;border-block:1px solid var(--line-2);margin-bottom:20px}
 .workspace-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(265px,320px);gap:20px;align-items:start}
 .workspace-grid>*{min-width:0}
+/* Graph view on a wide screen: the story on the left, the agents in the middle, tokens and legend on the right. */
+@media (min-width:1100px){
+  body.graph .workspace-grid{grid-template-columns:minmax(230px,290px) minmax(0,1fr) minmax(265px,320px)}
+  body.graph .side{display:contents}
+  body.graph #story{grid-column:1;grid-row:1/span 2}
+  body.graph .workspace-grid>div:first-child{grid-column:2;grid-row:1/span 2}
+  body.graph #tokens{grid-column:3;grid-row:1}
+  body.graph #legend{grid-column:3;grid-row:2}
+}
 #views button{display:flex;align-items:center;gap:6px}#views .ic{width:15px;height:15px}
 .scope{font-size:12px;color:var(--dim);border:1px solid var(--line-2);border-radius:999px;padding:3px 10px;text-decoration:none;transition:color var(--t-fast),border-color var(--t-fast)}
 .scope:hover{color:var(--text);border-color:var(--faint)}
@@ -174,6 +183,7 @@ body.graph #graph{display:block}
 .tokens .lim li{grid-template-columns:10px 1fr auto}
 .tokens .lim .w{grid-column:2/4;display:grid;grid-template-columns:44px 1fr auto;gap:8px;align-items:center;font-size:12px;color:var(--dim)}
 .tokens .lim .w .meter{grid-column:auto;margin:0}
+.tokens .lim .grp{grid-column:2/4;font-size:11px;color:var(--faint);margin-top:4px}
 .tokens .lim .w b{font-family:var(--num);font-variant-numeric:tabular-nums;font-weight:500;color:var(--text);min-width:9ch;text-align:right}
 .cap .ic{width:14px;height:14px;vertical-align:-2px;margin-right:4px}
 .info{position:absolute;right:12px;top:12px;width:min(400px,calc(100% - 24px));display:none;max-height:60%;overflow:hidden auto;font-weight:400}
@@ -631,12 +641,14 @@ const Graph = (() => {
     const L = S.data?.limits || {}
     const left = ms => { const m = Math.max(0, Math.round((ms - Date.now()) / 60000)); return m >= 1440 ? `${Math.floor(m / 1440)}d ${Math.floor(m % 1440 / 60)}h` : m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m` }
     const row = (t, why) => { const l = L[t], c = color(MAIN[t] || t + ':x')
-      const ws = l ? ['5h', 'week'].map(k => l.windows.find(w => w.kind === k)).filter(Boolean) : []
+      // agy has several quota groups (Gemini, Claude and GPT, Argon), each named above its bars.
+      const ws = l ? l.windows.slice().sort((x, y) => (x.kind === '5h' ? 0 : 1) - (y.kind === '5h' ? 0 : 1)) : []
+      const groups = [...new Set(ws.map(w => w.group || ''))]
       return `<li><span class="sw" style="background:${c}"></span><span class="nm">${esc(toolName(t))}</span><span class="na">${l ? 'read ' + ago(l.at) : ''}</span>
-        ${ws.length ? ws.map(w => `<span class="w"><span>${w.kind === '5h' ? '5 hours' : 'Week'}</span>
+        ${ws.length ? groups.map(g => (g ? `<span class="grp">${esc(g)}</span>` : '') + ws.filter(w => (w.group || '') === g).map(w => `<span class="w"><span>${w.kind === '5h' ? '5 hours' : 'Week'}</span>
           <span class="meter" style="--c:${w.pct >= 90 ? 'var(--err, #d4543a)' : c}" role="img" aria-label="${esc(toolName(t))} ${w.kind === '5h' ? '5-hour' : 'weekly'} limit: ${w.pct}% used"><i style="width:${Math.min(100, Math.max(.6, w.pct))}%"></i></span>
-          <b>${Math.round(w.pct)}%${w.resets ? ` · ${left(w.resets)}` : ''}</b></span>`).join('') : `<span class="w"><span></span><span class="na">${why}</span></span>`}</li>` }
-    return `<div class="lim"><div class="cap">Plan limits</div><ol>${row('claude', 'Shows after Claude Code’s next reply')}${row('codex', 'No Codex run in the last week')}${row('agy', 'agy does not save its quota to disk')}</ol></div>`
+          <b>${Math.round(w.pct)}%${w.resets ? ` · ${left(w.resets)}` : ''}</b></span>`).join('')).join('') : `<span class="w"><span></span><span class="na">${why}</span></span>`}</li>` }
+    return `<div class="lim"><div class="cap">Plan limits</div><ol>${row('claude', 'Shows after Claude Code’s next reply')}${row('codex', 'No Codex run in the last week')}${row('agy', 'Asking agy for its quota…')}</ol></div>`
   }
 
   document.getElementById('tokens').addEventListener('click', e => {

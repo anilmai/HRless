@@ -475,7 +475,31 @@ function limits() {
     out.codex = { at: t, windows: [win(rl.primary), win(rl.secondary)].filter(Boolean) }
     break
   }
+  refreshAgyQuota()
+  if (agyQuota) out.agy = agyQuota
   return out
+}
+// agy: `agy -p /usage` answers its quota without a model turn (0 tokens, no conversation).
+// Asked at most every 5 minutes, in the background, while the page is open.
+let agyQuota = null, agyAskedAt = 0
+function refreshAgyQuota() {
+  if (Date.now() - agyAskedAt < 5 * 60000) return
+  agyAskedAt = Date.now()
+  let p
+  try { p = spawn('agy', ['-p', '/usage', '--output-format', 'json'], { cwd: os.tmpdir(), windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }) } catch { return }
+  let s = ''
+  p.on('error', () => {})
+  p.stdout.on('data', d => { if (s.length < 1e6) s += d })
+  const kill = setTimeout(() => p.kill(), 90000)
+  p.on('close', () => {
+    clearTimeout(kill)
+    try {
+      const groups = JSON.parse(s).command?.data?.groups || []
+      const windows = groups.flatMap(g => (g.buckets || []).filter(b => b.window === '5h' || b.window === 'weekly').map(b => ({
+        kind: b.window === '5h' ? '5h' : 'week', group: g.name, pct: Math.round((1 - b.remaining_fraction) * 1000) / 10, resets: Date.parse(b.reset_time) || null })))
+      if (windows.length) agyQuota = { at: Date.now(), windows }
+    } catch {}
+  })
 }
 
 // --session <id>: open on that Claude session's own tree.
