@@ -98,7 +98,8 @@ body.graph #graph{display:block}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-xl);padding:12px 14px}
 .cap{font-size:12px;font-weight:600;color:var(--faint);margin:0 0 6px}
 .side{position:absolute;top:12px;left:12px;width:min(330px,calc(100% - 24px));max-height:calc(100% - 24px);display:flex;flex-direction:column;gap:10px;overflow:hidden auto}
-.legend{position:absolute;top:12px;right:12px;width:212px;max-height:calc(100% - 24px);overflow:auto;font-size:12px}
+.side.right{left:auto;right:12px;width:min(300px,calc(100% - 24px))}
+.legend{font-size:12px}
 .legend ul{list-style:none;margin:0 0 12px;padding:0}
 .legend li{display:flex;align-items:center;gap:8px;padding:3px 6px;margin:0 -6px;border-radius:var(--r-sm);cursor:default;transition:background var(--t-fast)}
 .legend li:hover{background:var(--sunk)}
@@ -153,7 +154,7 @@ body.graph #graph{display:block}
 .tokens .meter i{position:relative;display:block;height:100%;background:linear-gradient(90deg,var(--c) calc(100% - min(16px,45%)),transparent);transition:width 500ms var(--ease)}
 .tokens .note{color:var(--faint);font-size:11px;font-weight:400;margin:8px 0 0}
 .cap .ic{width:14px;height:14px;vertical-align:-2px;margin-right:4px}
-.info{position:absolute;right:236px;bottom:12px;width:min(420px,calc(100% - 24px));display:none;max-height:45%;overflow:hidden auto;font-weight:400}
+.info{position:absolute;right:324px;bottom:12px;width:min(420px,calc(100% - 24px));display:none;max-height:45%;overflow:hidden auto;font-weight:400}
 .info.show{display:block}
 .info .x{float:right;border:0;background:transparent;color:var(--faint);cursor:pointer;padding:2px;border-radius:var(--r-sm)}
 .info .x:hover{color:var(--text)}
@@ -182,7 +183,7 @@ dialog#settings h2{font:700 18px/1.3 var(--font);letter-spacing:-.015em;margin:0
   .row{grid-template-columns:auto 1fr}.when{grid-column:2;text-align:left}
   #graph{height:calc(100vh - 150px)}
   .side{max-height:42%}
-  .legend{width:150px;top:auto;bottom:12px;padding:8px 10px}.legend .hint{display:none}
+  .side.right{top:auto;bottom:12px;max-height:42%}.legend{padding:8px 10px}.legend .hint{display:none}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
@@ -218,10 +219,12 @@ dialog#settings h2{font:700 18px/1.3 var(--font);letter-spacing:-.015em;margin:0
 <section id="graph" aria-label="Agent graph">
   <canvas id="cv"></canvas>
   <div class="gempty" id="gempty">Loading…</div>
-  <aside class="legend panel" id="legend"></aside>
   <div class="side">
     <aside class="story panel" id="story" aria-live="polite"></aside>
+  </div>
+  <div class="side right">
     <aside class="tokens panel" id="tokens" aria-label="Token usage"></aside>
+    <aside class="legend panel" id="legend"></aside>
   </div>
   <div class="info panel" id="info"></div>
 </section>
@@ -430,9 +433,9 @@ const Graph = (() => {
     if (!nodes.size) return
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
     for (const n of nodes.values()) { x0 = Math.min(x0, n.tx); x1 = Math.max(x1, n.tx); y0 = Math.min(y0, n.ty); y1 = Math.max(y1, n.ty) }
-    // Leave the legend (right) and the story box (left) their room on a wide screen.
+    // Leave the right column (tokens, legend) and the story box (left) their room on a wide screen.
     const left = W > 900 && document.getElementById("story").innerHTML ? 350 : 0
-    const room = W - (W > 640 ? 250 : 40) - left
+    const room = W - (W > 640 ? 330 : 40) - left
     cam.k = Math.max(.25, Math.min(nodes.size <= 30 ? 1.8 : 1.3, room / (x1 - x0 + 200), (H - 100) / (y1 - y0 + 100)))
     cam.x = left + room / 2 - (x0 + x1) / 2 * cam.k
     cam.y = (H - (y1 - y0) * cam.k) / 2 - y0 * cam.k
