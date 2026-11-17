@@ -15,6 +15,17 @@ async function openDashboard($: EngineInterface) {
 }
 
 export const register: Register = on => {
+  // Claude's 5-hour and weekly windows, as Claude Code reads them, for the dashboard's limits card.
+  on('session.measure', async ($, e, next) => {
+    const windows = e.rateLimits.filter(r => r.kind === 'five_hour' || r.kind === 'seven_day')
+      .map(r => ({ kind: r.kind === 'five_hour' ? '5h' : 'week', pct: r.percentUsed, resets: r.resetsAt ? Date.parse(r.resetsAt) : null }))
+    if (windows.length && e.changed.includes('rateLimits')) {
+      const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME'))
+      if (home) await $.fs.write(`${home}/.hrless/limits.json`, JSON.stringify({ claude: { at: Date.now(), windows } })).catch(() => {})
+    }
+    return next(e)
+  })
+
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     // Other mods share this slot: keep theirs under ours.

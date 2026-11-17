@@ -9,7 +9,7 @@
 /* HRless: flat "mono" dashboard. No shadows, no gradients, no blur: 1px lines separate, an inverse
    surface (light on dark) marks what is selected. Fonts are the user's own if installed (nothing is fetched). */
 :root{
-  --font:Montserrat,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+  --font:Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
   --num:Geist,"Geist Mono","Segoe UI Variable Text",ui-sans-serif,system-ui,sans-serif;
   --mono:"Fira Code","Cascadia Code",Consolas,ui-monospace,monospace;
   --bg:#f7f7f5;--panel:#ffffff;--sunk:#efefec;--line:#e2e2de;--line-2:#d4d4cf;
@@ -33,13 +33,28 @@ button,input{font:inherit;color:inherit}
 .num{font-family:var(--num);font-variant-numeric:tabular-nums}
 
 /* header */
-header{position:sticky;top:0;z-index:3;background:var(--bg);border-bottom:1px solid var(--line)}
-.bar{padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.brand{display:flex;align-items:center;gap:8px;margin:0;font:700 16px/1 var(--font);letter-spacing:-.015em}
-.brand .ic{width:20px;height:20px}
+header{background:#142521;color:#f3f8f4}
+.bar,.workspace{width:min(1480px,100%);margin:auto;padding-inline:clamp(16px,4vw,68px)}
+.bar{min-height:62px;display:flex;gap:16px;align-items:center}
+.brand{display:flex;align-items:center;gap:10px;font:700 21px/1 var(--font);letter-spacing:-.045em}
+.brand .ic{width:31px;height:31px;padding:5px;color:#142521;background:#abefb5;border-radius:8px}
+.connection{color:#c3d5c9;font-size:12px}.connection::before{content:'';display:inline-block;width:7px;height:7px;background:#a5dcb1;border-radius:50%;margin-right:7px}
+.connection[data-status=offline]::before{background:#ffb378}
+.bar .scope{color:inherit;border-color:#687971}
+.bar button{display:flex;align-items:center;gap:7px;padding:7px 12px;background:#243a32;border:1px solid #465e52;border-radius:8px;color:inherit;cursor:pointer}
+.workspace{padding-block:32px 48px}
+.overview,.toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.overview{justify-content:space-between;margin-bottom:21px}
+.overview h1{font-size:clamp(26px,3vw,41px);letter-spacing:-.055em;line-height:1.08;margin:0}
+.toolbar{padding:12px 0;border-block:1px solid var(--line-2);margin-bottom:20px}
+.workspace-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(265px,320px);gap:20px;align-items:start}
+.workspace-grid>*{min-width:0}
+#views button{display:flex;align-items:center;gap:6px}#views .ic{width:15px;height:15px}
 .scope{font-size:12px;color:var(--dim);border:1px solid var(--line-2);border-radius:999px;padding:3px 10px;text-decoration:none;transition:color var(--t-fast),border-color var(--t-fast)}
 .scope:hover{color:var(--text);border-color:var(--faint)}
-.counts{display:flex;gap:14px;color:var(--dim);font-size:13px}
+.counts{display:flex;gap:6px;flex-wrap:wrap;color:var(--dim);font-size:13px}
+.counts span{padding:5px 10px;border:1px solid var(--line);border-radius:20px;background:var(--panel)}
+.counts span:first-child b{color:var(--work)}
 .counts b{color:var(--text);font:600 14px var(--num);font-variant-numeric:tabular-nums;margin-right:3px}
 .counts .live b{color:var(--work)}
 .spacer{flex:1}
@@ -57,10 +72,10 @@ input[type=search]:focus{border-color:var(--faint);outline:none}
 .icon[aria-pressed=true]{background:var(--inv);color:var(--on-inv);border-color:var(--inv)}
 
 /* list view */
-main{max-width:1120px;margin:0 auto;padding:20px 16px 40px}
-body.graph main{display:none}
-.empty{color:var(--dim);padding:56px 0;text-align:center}
-.agent{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-xl);margin-bottom:10px;animation:rise 360ms var(--ease) both}
+.empty{color:var(--dim);padding:64px 24px;text-align:center;border:1px dashed var(--line-2);border-radius:var(--r-xl)}
+body.graph #list{display:none}
+.agent{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-xl);margin-bottom:10px;overflow:hidden}
+.agent.open{border-color:var(--line-2)}.agent.open>.row{background:var(--sunk)}
 @keyframes rise{from{opacity:0;transform:translateY(6px)}}
 .row{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start;padding:14px 16px;cursor:pointer;border-radius:var(--r-xl);transition:background var(--t-fast)}
 .row:hover{background:var(--sunk)}
@@ -91,15 +106,17 @@ body.graph main{display:none}
 .more{color:var(--dim);font-size:12px;padding:6px 0 0}
 
 /* graph view */
-#graph{display:none;position:relative;height:calc(100vh - 57px);background:var(--gbg);overflow:hidden}
+#graph{display:none;position:relative;height:clamp(380px,64vh,760px);border:1px solid var(--line-2);border-radius:var(--r-xl);background-color:var(--gbg);background-image:radial-gradient(var(--line-2) 1px,transparent 1px);background-size:18px 18px;overflow:hidden}
 body.graph #graph{display:block}
 #cv{position:absolute;inset:0;width:100%;height:100%;cursor:grab;touch-action:none}
 #cv.grabbing{cursor:grabbing}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-xl);padding:12px 14px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-xl);padding:17px}
 .cap{font-size:12px;font-weight:600;color:var(--faint);margin:0 0 6px}
-.side{position:absolute;top:12px;left:12px;width:min(330px,calc(100% - 24px));max-height:calc(100% - 24px);display:flex;flex-direction:column;gap:10px;overflow:hidden auto}
-.side.right{left:auto;right:12px;width:min(300px,calc(100% - 24px))}
-.legend{font-size:12px}
+.side{display:grid;gap:14px}
+.side .cap{color:var(--dim)}
+.side>.panel>.cap:first-child{color:var(--text);font-size:16px;letter-spacing:-.025em;margin-bottom:12px}
+.legend{font-size:12px}.legend:empty,body:not(.graph) .legend{display:none}
+.fit{position:absolute;bottom:12px;left:12px;width:auto;padding:0 12px;display:flex;gap:6px;align-items:center}
 .legend ul{list-style:none;margin:0 0 12px;padding:0}
 .legend li{display:flex;align-items:center;gap:8px;padding:3px 6px;margin:0 -6px;border-radius:var(--r-sm);cursor:default;transition:background var(--t-fast)}
 .legend li:hover{background:var(--sunk)}
@@ -148,13 +165,18 @@ body.graph #graph{display:block}
 .tokens sup{color:var(--faint);font-size:10px;margin-left:1px}
 .tokens .kpi .usd{font-size:20px;font-weight:500;color:#d97757}
 /* Token bar: solid Claude orange for the share, then a halftone dot field that thins out to the right. */
-.tokens .meter{--c:#d97757;grid-column:2/4;position:relative;height:16px;border-radius:3px;overflow:hidden;margin-top:2px}
+.tokens .meter{--c:var(--work);grid-column:2/4;position:relative;height:5px;border-radius:3px;overflow:hidden;margin-top:2px;background:var(--sunk)}
 .tokens .meter::before{content:'';position:absolute;inset:0;background:radial-gradient(circle,var(--c) 1.15px,transparent 1.4px) 0 0/4px 4px;
   -webkit-mask-image:linear-gradient(90deg,rgba(0,0,0,.95),rgba(0,0,0,.18));mask-image:linear-gradient(90deg,rgba(0,0,0,.95),rgba(0,0,0,.18))}
 .tokens .meter i{position:relative;display:block;height:100%;background:linear-gradient(90deg,var(--c) calc(100% - min(16px,45%)),transparent);transition:width 500ms var(--ease)}
 .tokens .note{color:var(--faint);font-size:11px;font-weight:400;margin:8px 0 0}
+.tokens .lim{margin-top:14px}
+.tokens .lim li{grid-template-columns:10px 1fr auto}
+.tokens .lim .w{grid-column:2/4;display:grid;grid-template-columns:44px 1fr auto;gap:8px;align-items:center;font-size:12px;color:var(--dim)}
+.tokens .lim .w .meter{grid-column:auto;margin:0}
+.tokens .lim .w b{font-family:var(--num);font-variant-numeric:tabular-nums;font-weight:500;color:var(--text);min-width:9ch;text-align:right}
 .cap .ic{width:14px;height:14px;vertical-align:-2px;margin-right:4px}
-.info{position:absolute;right:324px;bottom:12px;width:min(420px,calc(100% - 24px));display:none;max-height:45%;overflow:hidden auto;font-weight:400}
+.info{position:absolute;right:12px;top:12px;width:min(400px,calc(100% - 24px));display:none;max-height:60%;overflow:hidden auto;font-weight:400}
 .info.show{display:block}
 .info .x{float:right;border:0;background:transparent;color:var(--faint);cursor:pointer;padding:2px;border-radius:var(--r-sm)}
 .info .x:hover{color:var(--text)}
@@ -177,13 +199,14 @@ dialog#settings h2{font:700 18px/1.3 var(--font);letter-spacing:-.015em;margin:0
 .sfoot .primary{background:var(--inv);color:var(--on-inv);border-color:var(--inv)}
 .sfoot .primary:hover{background:var(--inv);color:var(--on-inv);opacity:.9}
 
-@media (max-width:900px){.info{right:12px}}
+@media (max-width:850px){.workspace-grid{grid-template-columns:1fr}.side{grid-template-columns:repeat(auto-fit,minmax(min(270px,100%),1fr));align-items:start}}
 @media (max-width:640px){
   .bar{gap:8px}.search{flex:1 1 100%}input[type=search]{width:100%}
   .row{grid-template-columns:auto 1fr}.when{grid-column:2;text-align:left}
-  #graph{height:calc(100vh - 150px)}
-  .side{max-height:42%}
-  .side.right{top:auto;bottom:12px;max-height:42%}.legend{padding:8px 10px}.legend .hint{display:none}
+  .workspace{padding-block:22px}.overview{gap:10px}.toolbar{gap:8px}.bar{gap:8px}.toolbar .spacer{display:none}
+  #tools{flex-wrap:wrap;max-width:100%}.toolbar #views{margin-left:auto}
+  .bar .scope{font-size:11px}.bar .connection{margin-left:auto}.bar .spacer{display:none}
+  .kids{margin-left:11px;margin-right:5px;padding-left:5px}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
@@ -201,10 +224,15 @@ dialog#settings h2{font:700 18px/1.3 var(--font);letter-spacing:-.015em;margin:0
   <symbol id="i-waiting" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12M6 21h12"/><path d="M7 3v3a5 5 0 0 0 2 4l3 2-3 2a5 5 0 0 0-2 4v3M17 3v3a5 5 0 0 1-2 4l-3 2 3 2a5 5 0 0 1 2 4v3"/></symbol>
 </svg>
 <header><div class="bar">
-  <h1 class="brand"><svg class="ic" aria-hidden="true"><use href="#i-logo"/></svg>HRless</h1>
+  <div class="brand"><svg class="ic" aria-hidden="true"><use href="#i-logo"/></svg>HRless</div>
   <a class="scope" id="scope" hidden></a>
-  <div class="counts" id="counts" aria-live="polite"></div>
   <div class="spacer"></div>
+  <span class="connection" id="connection" role="status">Connecting</span>
+  <button id="setBtn"><svg class="ic" aria-hidden="true"><use href="#i-agents"/></svg>Add agent</button>
+</div></header>
+<main class="workspace">
+  <div class="overview"><h1>Agent activity</h1><div class="counts" id="counts"></div></div>
+  <div class="toolbar">
   <label class="search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="q" placeholder="Search project or task" aria-label="Search"></label>
   <div class="seg" id="tools" role="group" aria-label="Tool">
     <button data-v="all" aria-pressed="true">All</button><button data-v="claude">Claude</button><button data-v="codex">Codex</button><button data-v="agy">agy</button>
@@ -212,22 +240,25 @@ dialog#settings h2{font:700 18px/1.3 var(--font);letter-spacing:-.015em;margin:0
   <div class="seg" id="range" role="group" aria-label="Time range">
     <button data-v="0.5" aria-pressed="true">Active</button><button data-v="24">24 h</button><button data-v="168">7 d</button>
   </div>
-  <button class="icon" id="setBtn" title="Add an agent" aria-label="Add an agent"><svg class="ic" aria-hidden="true"><use href="#i-agents"/></svg></button>
-  <button class="icon" id="viewBtn" aria-pressed="false" title="Graph view" aria-label="Graph view"><svg class="ic" aria-hidden="true"><use id="viewIcon" href="#i-graph"/></svg></button>
-</div></header>
-<main id="list"><div class="empty">Loading…</div></main>
+  <div class="spacer"></div>
+  <div class="seg" id="views" role="group" aria-label="View">
+    <button data-v="list"><svg class="ic" aria-hidden="true"><use href="#i-list"/></svg>List</button>
+    <button data-v="graph"><svg class="ic" aria-hidden="true"><use href="#i-graph"/></svg>Graph</button>
+  </div>
+</div>
+<div class="workspace-grid"><div>
+<section id="list" aria-label="Agent list"><div class="empty">Loading…</div></section>
 <section id="graph" aria-label="Agent graph">
   <canvas id="cv"></canvas>
   <div class="gempty" id="gempty">Loading…</div>
-  <div class="side">
-    <aside class="story panel" id="story" aria-live="polite"></aside>
-  </div>
-  <div class="side right">
-    <aside class="tokens panel" id="tokens" aria-label="Token usage"></aside>
-    <aside class="legend panel" id="legend"></aside>
-  </div>
+  <button class="icon fit" id="fitBtn"><svg class="ic" aria-hidden="true"><use href="#i-fit"/></svg>Fit graph</button>
   <div class="info panel" id="info"></div>
 </section>
+</div><div class="side">
+  <aside class="tokens panel" id="tokens" aria-label="Token usage"></aside>
+  <aside class="story panel" id="story" aria-label="Current work"></aside>
+  <aside class="legend panel" id="legend" aria-label="Graph legend"></aside>
+</div></div></main>
 <dialog id="settings" aria-labelledby="setTitle">
   <h2 id="setTitle">Add an agent</h2>
   <p class="sdesc">Claude Code, Codex and agy show up on their own. Any other agent (DeepSeek, Aider, your own bot) adds itself:
@@ -284,7 +315,7 @@ function card(a) {
       <div class="when">${STATE[a.state]} · ${ago(a.mtime)}${a.tokens ? `<span class="tk">${fmtTok(a.tokens)} tokens${a.cost != null ? ' · ' + fmtUsd(a.cost) : ''}</span>` : ''}</div>
     </div>
     <div class="detail">${detail(a)}</div>
-    ${a.children.length ? `<div class="kids">${a.children.slice(0, open ? 99 : 4).map(card).join('')}
+    ${a.children.length ? `<div class="kids">${(open ? a.children : a.children.slice(0, 4)).map(card).join('')}
       ${!open && a.children.length > 4 ? `<div class="more">+${a.children.length - 4} more subagent(s) (click to expand)</div>` : ''}</div>` : ''}
   </div>`
 }
@@ -292,7 +323,18 @@ const detail = a => `${a.prompt ? `<div class="prompt">${esc(a.prompt)}</div>` :
   ${a.events.map(e => `<div class="ev ${e.kind}"><span class="kind">${KIND[e.kind]}</span><span class="txt">${esc(e.text)}</span></div>`).join('')}
   <div class="meta">${esc(a.cwd)} · ${esc(a.id)}</div>`
 const text = a => [a.title, a.cwd, a.prompt, a.kind, ...a.events.map(e => e.text), ...a.children.map(text)].join(' ').toLowerCase()
-const visible = () => S.data.agents.filter(a => (S.tool === 'all' || a.tool === S.tool) && (!S.q || text(a).includes(S.q)))
+function visible() {
+  function select(a) {
+    if (S.tool === 'all' || a.tool === S.tool) return [a]
+    return a.children.flatMap(select)
+  }
+  return S.data.agents.flatMap(select).filter(a => !S.q || text(a).includes(S.q))
+}
+function emptyMessage() {
+  if (S.q || S.tool !== 'all') return 'No matching agents. Try another search or tool.'
+  if (SESSION) return 'No activity found for this session.'
+  return S.hours === '0.5' ? 'No activity in the last 30 minutes. Choose 24 h to see earlier sessions.' : 'No agents in this time range.'
+}
 
 function render() {
   if (!S.data) return
@@ -301,9 +343,16 @@ function render() {
   document.getElementById('counts').innerHTML = `<span><b>${count('working')}</b> working</span><span><b>${count('idle')}</b> idle</span><span><b>${SESSION ? count('working') + count('idle') + count('done') : all.length}</b> ${SESSION ? 'agent' : 'sessions'}</span>`
   syncTools()
   const list = visible()
-  if (S.view === 'graph') return Graph.sync(list)
-  document.getElementById('list').innerHTML = list.length ? list.map(card).join('')
-    : `<div class="empty">${S.hours === '0.5' ? 'No agent has worked in the last 30 minutes. Try “24 h” to look back.' : 'No agents in this time range.'}</div>`
+  const focused = document.activeElement
+  const rowId = focused.closest('.row')?.parentElement.dataset.id
+  const tokenRange = focused.closest('#tokens button')?.dataset.v
+  Graph.summary(list)
+  if (S.view === 'graph') Graph.sync(list)
+  else {
+    document.getElementById('list').innerHTML = list.length ? list.map(card).join('') : `<div class="empty">${emptyMessage()}</div>`
+    if (rowId) document.querySelector(`[data-id="${CSS.escape(rowId)}"] > .row`)?.focus({preventScroll:true})
+  }
+  if (tokenRange) document.querySelector(`#tokens [data-v="${CSS.escape(tokenRange)}"]`)?.focus({preventScroll:true})
 }
 
 // ---------- graph view ----------
@@ -350,7 +399,7 @@ const Graph = (() => {
   const nodes = new Map()
   let links = [], roots = [], W = 0, H = 0, dpr = 1
   let cam = { x: 0, y: 0, k: 1 }, fitted = false, hover = null, sel = null, hlCat = null
-  let drag = null, active = false
+  let drag = null, active = false, frame
 
   function resize() {
     const r = cv.getBoundingClientRect(); dpr = window.devicePixelRatio || 1
@@ -376,10 +425,8 @@ const Graph = (() => {
     if (sel && !nodes.has(sel.id)) closeInfo()
     if (sel) showInfo(sel)
     legend()
-    story(list)
-    tokens(list)
     emptyEl.hidden = nodes.size > 0
-    emptyEl.textContent = S.hours === '0.5' ? 'No agent has worked in the last 30 minutes. Try “24 h” to look back.' : 'No agents in this time range.'
+    emptyEl.textContent = emptyMessage()
     if (!fitted && nodes.size) { for (const n of nodes.values()) { n.x = n.tx; n.y = n.ty } fit(); fitted = true }
   }
   const radius = n => n.depth === 0 ? Math.min(20, 11 + Math.sqrt(n.kids) * 2) : n.kids ? 9 : 6.5
@@ -412,7 +459,7 @@ const Graph = (() => {
     order.forEach(width)
     const total = order.reduce((s, r) => s + r.w, 0)
     // Rows as wide as the screen's shape asks: wide on a monitor, two trees a row on a phone.
-    const aspect = W && H ? (W - (W > 640 ? 250 : 40) - (W > 900 ? 350 : 0)) / H : 2
+    const aspect = W && H ? W / H : 2
     const rowMax = Math.max(ROOT_W, Math.sqrt(total * 260 * aspect))
     let x = 0, y = 0, rowH = 0
     for (const r of order) {
@@ -433,11 +480,9 @@ const Graph = (() => {
     if (!nodes.size) return
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
     for (const n of nodes.values()) { x0 = Math.min(x0, n.tx); x1 = Math.max(x1, n.tx); y0 = Math.min(y0, n.ty); y1 = Math.max(y1, n.ty) }
-    // Leave the right column (tokens, legend) and the story box (left) their room on a wide screen.
-    const left = W > 900 && document.getElementById("story").innerHTML ? 350 : 0
-    const room = W - (W > 640 ? 330 : 40) - left
+    const room = Math.max(1, W - 32)
     cam.k = Math.max(.25, Math.min(nodes.size <= 30 ? 1.8 : 1.3, room / (x1 - x0 + 200), (H - 100) / (y1 - y0 + 100)))
-    cam.x = left + room / 2 - (x0 + x1) / 2 * cam.k
+    cam.x = W / 2 - (x0 + x1) / 2 * cam.k
     cam.y = (H - (y1 - y0) * cam.k) / 2 - y0 * cam.k
   }
   const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim()
@@ -495,7 +540,7 @@ const Graph = (() => {
       }
     }
     ctx.globalAlpha = 1
-    if (active) requestAnimationFrame(draw)
+    if (active) frame = requestAnimationFrame(draw)
   }
 
   // The left box tells the running work as sentences: who orchestrates, whom it assigned, who waits for whom.
@@ -543,7 +588,7 @@ const Graph = (() => {
     const el = document.getElementById('story')
     // One session: its own story. Every session: the ones with work going on, busiest first.
     const pick = SESSION ? list : list.filter(busyTree).slice(0, 3)
-    el.innerHTML = pick.map(tell).join('')
+    el.innerHTML = pick.length ? '<div class="cap">Current work</div>' + pick.map(tell).join('') : ''
   }
 
   // Tokens every agent here burned (input + output + cache reads and writes),
@@ -569,18 +614,35 @@ const Graph = (() => {
     list.forEach(walk)
     const rows = [...by].filter(([, v]) => v.t > 0).sort((x, y) => y[1].t - x[1].t)
     const money = (r) => r.t && r.unpriced === r.t ? '<span class="na" title="No price known for this model">no price</span>' : fmtUsd(r.usd) + (r.unpriced ? '<sup title="Some of these tokens have no known price">*</sup>' : '')
-    el.innerHTML = `<div class="cap"><svg class="ic" aria-hidden="true"><use href="#i-tokens"/></svg>Tokens burned</div>${tabs}
+    if (!own && !S.tok) {
+      el.innerHTML = `<div class="cap">Token usage</div>${tabs}<p class="note">${S.tokError ? 'Usage unavailable. Retrying…' : 'Loading usage…'}</p>`
+      return
+    }
+    el.innerHTML = `<div class="cap"><svg class="ic" aria-hidden="true"><use href="#i-tokens"/></svg>Token usage</div>${tabs}
       <div class="kpi"><span class="num">${fmtTok(total)}</span><span class="usd num">${fmtUsd(usd)}${unpriced ? '<sup>*</sup>' : ''}</span><span>All · ${n} agent${n === 1 ? '' : 's'}</span></div>
       <ol>${rows.map(([t, v]) => { const c = color(MAIN[t] || t + ':x')
         return `<li><span class="sw" style="background:${c}"></span><span class="nm">${esc(toolName(t))}</span><span class="v">${fmtTok(v.t)}<span class="d">${money(v)}</span></span>
           <span class="meter" role="img" aria-label="${esc(toolName(t))}: ${Math.round(v.t / total * 100)}% of all tokens"><i style="width:${Math.max(.6, v.t / (total || 1) * 100)}%"></i></span></li>` }).join('') || `<li><span></span><span class="nm">${!own && !S.tok ? 'Loading…' : 'No usage yet'}</span><span></span></li>`}</ol>
-      <p class="note">Dollars are API list prices (cache reads included), not what a subscription bills.${own ? '' : ' A session that worked in the range counts in full.'}${unpriced ? ` * ${fmtTok(unpriced)} tokens have no known price; add one under "prices" in ~/.hrless/config.json.` : ''} agy's count is read from its own files and is close, not exact.</p>`
+      <p class="note">Dollars are API list prices (cache reads included), not what a subscription bills.${own ? '' : ' A session that worked in the range counts in full.'}${unpriced ? ` * ${fmtTok(unpriced)} tokens have no known price; add one under "prices" in ~/.hrless/config.json.` : ''} agy's count is read from its own files and is close, not exact.</p>${limitsHtml()}`
+  }
+
+  // Plan limits per tool: the 5-hour and weekly windows, how full each is and when it resets.
+  function limitsHtml() {
+    const L = S.data?.limits || {}
+    const left = ms => { const m = Math.max(0, Math.round((ms - Date.now()) / 60000)); return m >= 1440 ? `${Math.floor(m / 1440)}d ${Math.floor(m % 1440 / 60)}h` : m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m` }
+    const row = (t, why) => { const l = L[t], c = color(MAIN[t] || t + ':x')
+      const ws = l ? ['5h', 'week'].map(k => l.windows.find(w => w.kind === k)).filter(Boolean) : []
+      return `<li><span class="sw" style="background:${c}"></span><span class="nm">${esc(toolName(t))}</span><span class="na">${l ? 'read ' + ago(l.at) : ''}</span>
+        ${ws.length ? ws.map(w => `<span class="w"><span>${w.kind === '5h' ? '5 hours' : 'Week'}</span>
+          <span class="meter" style="--c:${w.pct >= 90 ? 'var(--err, #d4543a)' : c}" role="img" aria-label="${esc(toolName(t))} ${w.kind === '5h' ? '5-hour' : 'weekly'} limit: ${w.pct}% used"><i style="width:${Math.min(100, Math.max(.6, w.pct))}%"></i></span>
+          <b>${Math.round(w.pct)}%${w.resets ? ` · ${left(w.resets)}` : ''}</b></span>`).join('') : `<span class="w"><span></span><span class="na">${why}</span></span>`}</li>` }
+    return `<div class="lim"><div class="cap">Plan limits</div><ol>${row('claude', 'Shows after Claude Code’s next reply')}${row('codex', 'No Codex run in the last week')}${row('agy', 'agy does not save its quota to disk')}</ol></div>`
   }
 
   document.getElementById('tokens').addEventListener('click', e => {
     const b = e.target.closest('button[data-v]'); if (!b || b.dataset.v === tokKey()) return
     if (SESSION) S.tokSess = b.dataset.v; else { S.tokHours = b.dataset.v; save() }
-    S.tok = null; render(); loadTokens(true)
+    S.tok = null; S.tokError = false; render(); loadTokens(true)
   })
 
   function legend() {
@@ -589,12 +651,11 @@ const Graph = (() => {
     const order = [...counts.keys()].sort((a, b) => (b.endsWith(':session') || b.endsWith(':thread') || b.endsWith(':conversation')) - (a.endsWith(':session') || a.endsWith(':thread') || a.endsWith(':conversation')) || a.localeCompare(b))
     legendEl.innerHTML = `<div class="cap">Agents</div><ul>${order.map(k => `<li data-k="${esc(k)}"><span class="sw" style="background:${color(k)}"></span><span class="nm" title="${esc(catName(k))}">${esc(catName(k))}</span><span class="n">${counts.get(k)}</span></li>`).join('') || '<li><span class="nm">—</span></li>'}</ul>
       <div class="cap">Status</div><ul><li><span class="ring"></span><span class="nm">working</span></li><li><span class="sw" style="background:var(--faint)"></span><span class="nm">idle</span></li><li><span class="faded"></span><span class="nm">done</span></li></ul>
-      <div class="hint">Orchestrator on top, the agents at work below it; finished ones leave the graph. Drag to pan, scroll to zoom, click a ball.</div>
-      <button class="reset" id="fitBtn"><svg class="ic" aria-hidden="true"><use href="#i-fit"/></svg>Fit</button>`
+      <div class="hint">Drag to pan, scroll to zoom, or select an agent for details.</div>`
   }
   legendEl.addEventListener('mouseover', e => { const li = e.target.closest('li[data-k]'); hlCat = li ? li.dataset.k : null })
   legendEl.addEventListener('mouseleave', () => { hlCat = null })
-  legendEl.addEventListener('click', e => { if (e.target.id === 'fitBtn') fit() })
+  document.getElementById('fitBtn').addEventListener('click', fit)
 
   function showInfo(n) {
     sel = n; const a = n.a
@@ -632,33 +693,68 @@ const Graph = (() => {
 
   return {
     sync,
-    start() { active = true; resize(); fitted = false; if (S.data) sync(visible()); requestAnimationFrame(draw) },
-    stop() { active = false; hover = null },
+    summary(list) { story(list); tokens(S.data.agents) },
+    start() { active = true; resize(); fitted = false; if (S.data) sync(visible()); frame = requestAnimationFrame(draw) },
+    stop() { active = false; cancelAnimationFrame(frame); hover = null },
   }
 })()
 
 // ---------- controls ----------
-// One request at a time: a slow answer is never overtaken by the next poll.
-let loading = false
+let agentRequest
 async function load() {
-  if (loading) return
-  loading = true
-  setTimeout(() => { loading = false }, 30000)
+  const hours = S.hours
+  if (agentRequest?.hours === hours) return
+  agentRequest?.controller.abort()
+  const controller = new AbortController()
+  agentRequest = { hours, controller }
+  const timeout = setTimeout(() => controller.abort(), 30000)
+  const connection = document.getElementById('connection')
   try {
-    const r = await fetch('/api/agents?hours=' + S.hours + (SESSION ? '&session=' + encodeURIComponent(SESSION) : ''), { cache: 'no-store' })
-    S.data = await r.json(); render()
-  } catch { document.getElementById('list').innerHTML = '<div class="empty">Could not reach the server. Press the HRless button in Claude Code again.</div>' }
-  finally { loading = false }
+    const r = await fetch('/api/agents?hours=' + hours + (SESSION ? '&session=' + encodeURIComponent(SESSION) : ''), { cache: 'no-store', signal: controller.signal })
+    if (!r.ok) throw Error(r.status)
+    const data = await r.json()
+    if (agentRequest?.controller !== controller) return
+    S.data = data
+    connection.textContent = 'Live'
+    connection.dataset.status = 'live'
+    render()
+  } catch {
+    if (agentRequest?.controller !== controller) return
+    connection.textContent = 'Reconnecting'
+    connection.dataset.status = 'offline'
+    if (!S.data) {
+      const msg = 'Waiting for the local server. Retrying automatically…'
+      document.querySelector('#list .empty').textContent = msg
+      document.getElementById('gempty').textContent = msg
+    }
+  } finally {
+    clearTimeout(timeout)
+    if (agentRequest?.controller === controller) agentRequest = null
+  }
 }
 // The token card's range is read on its own, every 15 s at most: a long range is a big read.
-let tokAt = 0
+let tokAt = 0, tokenRequest
 // One session's view opens on that session's own count; its other tabs count every session.
 const tokKey = () => SESSION ? S.tokSess : S.tokHours
 async function loadTokens(now) {
-  if (tokKey() === 's' || (!now && Date.now() - tokAt < 15000)) return
-  tokAt = Date.now(); const h = tokKey()
-  try { const r = await fetch('/api/tokens?hours=' + h, { cache: 'no-store' }); const t = await r.json(); if (h === tokKey()) { S.tok = t; render() } }
-  catch { tokAt = 0 }
+  const h = tokKey()
+  if (tokenRequest?.hours === h) return
+  tokenRequest?.controller.abort()
+  if (h === 's' || (!now && Date.now() - tokAt < 15000)) return
+  const controller = new AbortController()
+  tokenRequest = { hours: h, controller }
+  const timeout = setTimeout(() => controller.abort(), 30000)
+  try {
+    const r = await fetch('/api/tokens?hours=' + h, { cache: 'no-store', signal: controller.signal })
+    if (!r.ok) throw Error(r.status)
+    const t = await r.json()
+    if (tokenRequest?.controller === controller && h === tokKey()) { tokAt = Date.now(); S.tokError = false; S.tok = t; render() }
+  } catch {
+    if (tokenRequest?.controller === controller && h === tokKey()) { tokAt = 0; S.tokError = true; render() }
+  } finally {
+    clearTimeout(timeout)
+    if (tokenRequest?.controller === controller) tokenRequest = null
+  }
 }
 // One filter button per custom agent the user added, after the built-in ones.
 let toolsKey = ''
@@ -702,14 +798,14 @@ function setView(v) {
   S.view = v; save()
   const g = v === 'graph'
   document.body.classList.toggle('graph', g)
-  const btn = document.getElementById('viewBtn')
-  btn.setAttribute('aria-pressed', g); btn.title = btn.ariaLabel = g ? 'List view' : 'Graph view'
-  // The button shows where it leads: the list icon while the graph is up, and back.
-  document.getElementById('viewIcon').setAttribute('href', g ? '#i-list' : '#i-graph')
+  document.querySelectorAll('#views button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === v))
   g ? Graph.start() : (Graph.stop(), render())
 }
 seg('tools', 'tool'); seg('range', 'hours')
-document.getElementById('viewBtn').addEventListener('click', () => setView(S.view === 'graph' ? 'list' : 'graph'))
+document.getElementById('views').addEventListener('click', e => {
+  const next = e.target.closest('button')?.dataset.v
+  if (next && next !== S.view) setView(next)
+})
 document.getElementById('q').addEventListener('input', e => { S.q = e.target.value.toLowerCase().trim(); render() })
 const toggle = row => { const id = row.parentElement.dataset.id; S.open.has(id) ? S.open.delete(id) : S.open.add(id); render() }
 document.getElementById('list').addEventListener('click', e => { const row = e.target.closest('.row'); if (row) toggle(row) })

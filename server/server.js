@@ -433,15 +433,49 @@ function snapshot(hours, session) {
   const trees = safe(() => collectClaude(since, session))
   // Custom agents first find a parent they name themselves (another of theirs, or any agent's id).
   const mine = safe(() => custom.collectCustom(extSince, state))
+  const external = [...safe(() => collectCodex(extSince)), ...safe(() => collectAgy(extSince))]
   const byId = new Map()
+  const index = n => { byId.set(n.id, n); n.children.forEach(index) }
+  external.forEach(index)
   for (const t of trees) for (const n of t.all) byId.set(n.id, n)
   for (const n of mine) byId.set(n.id, n)
-  const loose = mine.filter(n => { const p = n._parent && byId.get(n._parent); if (p && p !== n) { p.children.push(n); return false } return true })
-  const left = adoptCli(trees, [...safe(() => collectCodex(extSince)), ...safe(() => collectAgy(extSince)), ...loose])
-  const roots = session ? trees.map(t => t.root) : [...trees.map(t => t.root), ...left]
+  const loose = mine.filter(n => {
+    const parent = byId.get(n._parent)
+    if (!parent) return true
+    const seen = new Set([n])
+    for (let p = parent; p; p = byId.get(p._parent)) {
+      if (seen.has(p)) return true
+      seen.add(p)
+    }
+    parent.children.push(n)
+    return false
+  })
+  const left = adoptCli(trees, [...external, ...loose])
+  const roots = session ? [byId.get(session)].filter(Boolean) : [...trees.map(t => t.root), ...left]
   const agents = roots.map(settle).sort((x, y) => y.mtime - x.mtime)
-  left.forEach(settle)
-  return { now: Date.now(), hours, session: session || null, sources: custom.sources(), agents }
+  return { now: Date.now(), hours, session: session || null, sources: custom.sources(), agents, limits: safe(limits) }
+}
+
+// Plan limits (5-hour and weekly windows), as { tool: { at, windows: [{ kind: '5h'|'week', pct, resets }] } }.
+// Claude: written by the HRless mod from Claude Code's own rate-limit reading (hooks/register.tsx).
+// Codex: the last rate_limits its newest rollout file recorded. agy keeps its quota in memory only.
+const LIMITS_FILE = path.join(HOME, '.hrless', 'limits.json')
+function limits() {
+  const out = {}
+  try { const c = JSON.parse(fs.readFileSync(LIMITS_FILE, 'utf8')).claude; if (c?.windows) out.claude = c } catch {}
+  const newest = codexFiles(Date.now() - 8 * 86400000).sort((a, b) => b[1] - a[1])
+  for (const [file, t, size] of newest.slice(0, 5)) {
+    const rl = memo('rl:' + file, size, () => {
+      const recs = tailJson(file)
+      for (let i = recs.length - 1; i >= 0; i--) { const r = recs[i].payload?.rate_limits; if (r?.primary || r?.secondary) return r }
+      return null
+    })
+    if (!rl) continue
+    const win = w => w && { kind: w.window_minutes <= 300 ? '5h' : 'week', pct: w.used_percent, resets: w.resets_at * 1000 }
+    out.codex = { at: t, windows: [win(rl.primary), win(rl.secondary)].filter(Boolean) }
+    break
+  }
+  return out
 }
 
 // --session <id>: open on that Claude session's own tree.

@@ -81,7 +81,7 @@ function glob(pattern, since) {
       if (--budget < 0 || out.length >= 300) return
       const full = dir + '/' + n, r = rel ? rel + '/' + n : n
       const st = stat(full); if (!st) continue
-      if (st.isDirectory()) { if (depth < 8 && st.mtimeMs >= since - 86400000) walk(full, r, depth + 1) }
+      if (st.isDirectory()) { if (depth < 8) walk(full, r, depth + 1) }
       else if (st.mtimeMs >= since && re.test(r)) out.push([full, st])
     }
   }
@@ -108,9 +108,11 @@ function record(a, r) {
   // OpenAI-style usage (prompt/completion) or Anthropic-style (input/output) on a reply.
   const us = r.usage || m.usage
   if (us && typeof us === 'object') {
-    a.use.in += (us.prompt_tokens || 0) + (us.input_tokens || 0)
-    a.use.out += (us.completion_tokens || 0) + (us.output_tokens || 0)
-    a.use.cr += us.cache_read_input_tokens || us.prompt_tokens_details?.cached_tokens || 0
+    const cached = us.prompt_tokens_details?.cached_tokens || 0
+    a.use.in += us.input_tokens ?? Math.max(0, (us.prompt_tokens || 0) - cached)
+    a.use.out += us.output_tokens ?? us.completion_tokens ?? 0
+    a.use.cr += us.cache_read_input_tokens ?? cached
+    a.use.cw += us.cache_creation_input_tokens || 0
   }
   if (/complete|finished|done|exit|end/.test(String(r.status || r.type || r.event || '').toLowerCase())) a.done = true
   const calls = m.tool_calls || r.tool_calls || (role.includes('tool') && (m.name || r.tool) ? [{ name: m.name || r.tool, arguments: m.arguments || r.input }] : [])
@@ -136,9 +138,11 @@ function readLog(file, st) {
     let whole = null
     if (size === st.size && /^\s*[[{]/.test(s)) try { whole = JSON.parse(s) } catch {}
     if (whole) {
-      const msgs = Array.isArray(whole) ? whole : whole.messages || whole.history || whole.conversation || whole.turns || []
-      record(a, { ...whole, messages: undefined, content: undefined, role: 'session' })
-      for (const m of Array.isArray(msgs) ? msgs : []) record(a, m)
+      const msgs = Array.isArray(whole) ? whole : whole.messages || whole.history || whole.conversation || whole.turns
+      if (Array.isArray(msgs)) {
+        if (!Array.isArray(whole)) record(a, { ...whole, content: undefined, role: 'session' })
+        for (const m of msgs) record(a, m)
+      } else record(a, whole)
     } else {
       const lines = s.split('\n'); if (size < st.size) lines.shift()
       for (const l of lines) if (l.trim()) try { record(a, JSON.parse(l)) } catch {}
@@ -187,7 +191,7 @@ function collectCustom(since, state) {
       const id = path.basename(file).replace(/\.[^.]+$/, '')
       nodes.push({ id: `${ag.key}:${id}`, tool: ag.key, kind: ag.name, title: clip(a.title || a.first || a.prompt, 80) || id.slice(0, 12),
         cwd: a.cwd, model: a.model, prompt: clip(a.prompt, 400), events: a.events, mtime: st.mtimeMs, state: state(st.mtimeMs, a.done),
-        children: [], use: a.use.in + a.use.out ? a.use : null, start: st.birthtimeMs || st.mtimeMs, cli: ag.cli, _parent: a.parent ? `${ag.key}:${a.parent}` : null })
+        children: [], use: Object.values(a.use).some(v => v > 0) ? a.use : null, start: st.birthtimeMs || st.mtimeMs, cli: ag.cli, _parent: a.parent ? `${ag.key}:${a.parent}` : null })
     }
   }
   for (const r of reports.values()) {
