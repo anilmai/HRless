@@ -30,6 +30,7 @@ Requires Node.js 22.5 or newer on `PATH` (agy conversations are read with `node:
 - **Graph:** each agent is a ball, with the orchestrator on top and the agents it started in tiers below. Only working agents are drawn under the orchestrator; finished ones stay in the list view. Drag to pan, scroll to zoom, click a ball for details.
 - **Story:** the current work in a few lines: the session, its status, the agents it assigned and its latest step.
 - **Tokens:** tokens used per tool (Claude, Codex, agy, custom agents), with tabs for 24 h, 7 d, 30 d, 90 d and all time. In a single-session view the first tab counts that session only. A session that worked within the range counts in full.
+- **Plan limits:** each tool's 5-hour and weekly limit, how much is used and when it resets. Claude's comes from Claude Code itself (it fills in after the first reply once the plugin is installed), Codex's from its session files, and agy's from `agy -p /usage`, asked every 5 minutes; that needs `agy` on `PATH` and signed in. An agy too old to answer `/usage` without a model turn is asked once and then left alone.
 - **This session · see all:** the page opened by the button shows one session; this link switches to every session on the machine.
 
 Agents not started by a tracked agent (a script that ran agy forty times, for example) are grouped per tool once there are three or more.

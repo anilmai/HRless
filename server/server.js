@@ -494,11 +494,14 @@ function refreshAgyQuota() {
   p.on('close', () => {
     clearTimeout(kill)
     try {
-      const groups = JSON.parse(s).command?.data?.groups || []
+      const r = JSON.parse(s)
+      // An agy too old to answer /usage itself treats it as a prompt and runs a real (paid) turn: never ask it again.
+      if (r.num_turns > 0 || r.usage?.total_tokens > 0 || !r.command) { agyAskedAt = Infinity; return }
+      const groups = r.command.data?.groups || []
       const windows = groups.flatMap(g => (g.buckets || []).filter(b => b.window === '5h' || b.window === 'weekly').map(b => ({
         kind: b.window === '5h' ? '5h' : 'week', group: g.name, pct: Math.round((1 - b.remaining_fraction) * 1000) / 10, resets: Date.parse(b.reset_time) || null })))
       if (windows.length) agyQuota = { at: Date.now(), windows }
-    } catch {}
+    } catch { if (s.trim()) agyAskedAt = Infinity } // it answered, but not in a shape we know: stop asking too
   })
 }
 
