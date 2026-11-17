@@ -49,14 +49,23 @@ header{background:#142521;color:#f3f8f4}
 .toolbar{padding:12px 0;border-block:1px solid var(--line-2);margin-bottom:20px}
 .workspace-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(265px,320px);gap:20px;align-items:start}
 .workspace-grid>*{min-width:0}
-/* Graph view on a wide screen: the story on the left, the agents in the middle, tokens and legend on the right. */
+/* Graph view on a wide screen fills the window: story and agent legend on the left,
+   the graph in the middle, tokens on the right; columns scale with the window width. */
 @media (min-width:1100px){
-  body.graph .workspace-grid{grid-template-columns:minmax(230px,290px) minmax(0,1fr) minmax(265px,320px)}
+  body.graph{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
+  body.graph>header{flex:none}
+  body.graph .bar,body.graph .workspace{width:100%;padding-inline:clamp(16px,1.8vw,36px)}
+  body.graph .workspace{flex:1;min-height:0;display:flex;flex-direction:column;padding-block:clamp(12px,2vh,28px)}
+  body.graph .overview{margin-bottom:clamp(8px,1.4vh,21px)}
+  body.graph .toolbar{margin-bottom:clamp(10px,1.6vh,20px)}
+  body.graph .workspace-grid{flex:1;min-height:0;grid-template-columns:clamp(220px,17vw,340px) minmax(0,1fr) clamp(260px,19vw,380px);grid-template-rows:auto minmax(0,1fr);gap:clamp(12px,1.2vw,20px);align-items:stretch}
   body.graph .side{display:contents}
-  body.graph #story{grid-column:1;grid-row:1/span 2}
-  body.graph .workspace-grid>div:first-child{grid-column:2;grid-row:1/span 2}
-  body.graph #tokens{grid-column:3;grid-row:1}
-  body.graph #legend{grid-column:3;grid-row:2}
+  body.graph .side>.panel{overflow:hidden auto;min-height:0}
+  body.graph #story{grid-column:1;grid-row:1;max-height:55vh}
+  body.graph #legend{grid-column:1;grid-row:2;align-self:start;max-height:100%}
+  body.graph .workspace-grid>div:first-child{grid-column:2;grid-row:1/-1;min-height:0}
+  body.graph #graph{height:100%}
+  body.graph #tokens{grid-column:3;grid-row:1/-1}
 }
 #views button{display:flex;align-items:center;gap:6px}#views .ic{width:15px;height:15px}
 .scope{font-size:12px;color:var(--dim);border:1px solid var(--line-2);border-radius:999px;padding:3px 10px;text-decoration:none;transition:color var(--t-fast),border-color var(--t-fast)}
