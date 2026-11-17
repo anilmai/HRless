@@ -124,7 +124,10 @@ body.graph #graph{display:block}
 .story li .what{color:var(--dim);font-weight:400;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .story li .st{margin-left:auto;color:var(--faint);font-size:12px;white-space:nowrap}
 .story li.working .st{color:var(--work)}
-.story .now{color:var(--text);font-weight:500;margin:0;border-top:1px solid var(--line);padding-top:8px;overflow-wrap:anywhere}
+.story .now{color:var(--dim);margin:0 0 8px;overflow-wrap:anywhere}
+.story .last{border-top:1px solid var(--line);padding-top:8px;color:var(--dim)}
+.story .last .k{display:block;font-size:11px;color:var(--faint);margin-bottom:2px}
+.story .last .t{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
 .story .now .ic{width:15px;height:15px;vertical-align:-3px;margin-right:5px;color:var(--idle)}
 .story .wait::after{content:'';display:inline-block;width:1.2em;text-align:left;animation:dots 1.4s steps(4) infinite}
 @keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
@@ -514,23 +517,24 @@ const Graph = (() => {
       <span class="who">${esc(label(a))}</span><span class="what" title="${esc(a.title)}">${esc(a.title)}</span><span class="st">${STATE_EN[a.state]}</span></li>`
       + a.children.filter(busyTree).slice(0, 12).map(c => item(c, depth + 1)).join('')
   }
+  const LAST = { say: 'Last said', tool: 'Last step', prompt: 'Asked' }
   function tell(a) {
     const name = esc(who(a))
     const kids = all(a), busy = kids.filter(k => k.state === 'working')
     const last = a.events[a.events.length - 1]
-    let line
-    if (!kids.length) line = a.state === 'working' ? `<b>${name}</b> is working alone.` : `<b>${name}</b> worked alone.`
-    else line = `<b>${name}</b> ${a.state === 'done' ? 'called' : 'has called'} ${a.children.length} agent${a.children.length > 1 ? 's' : ''}${kids.length > a.children.length ? `, which called ${kids.length - a.children.length} more` : ''}.`
+    // Status first, in one short line; what the agent last did goes below it, quieter and cut to two lines.
+    let line = ''
+    if (kids.length) line = `<b>${name}</b> ${a.state === 'done' ? 'called' : 'has called'} ${a.children.length} agent${a.children.length > 1 ? 's' : ''}${kids.length > a.children.length ? `, which called ${kids.length - a.children.length} more` : ''}.`
     let now
     if (busy.length && a.state !== 'working') now = `<svg class="ic" aria-hidden="true"><use href="#i-waiting"/></svg><span class="wait"><b>${name}</b> is waiting for ${busy.map(k => esc(who(k))).join(', ')} to finish</span>`
     else if (busy.length) now = `<b>${name}</b> and ${busy.length} agent${busy.length > 1 ? 's are' : ' is'} working.`
-    else if (a.state === 'working') now = `<b>${name}</b> is working${last ? ': ' + esc(last.text.slice(0, 90)) : '.'}`
-    else now = a.state === 'idle' ? `Idle since ${ago(a.mtime)}.` : 'All work is finished.'
+    else if (a.state === 'working') now = `<b>${name}</b> is working.`
+    else now = a.state === 'idle' ? `<b>${name}</b> is idle, last active ${ago(a.mtime)}.` : `<b>${name}</b> has finished.`
     const active = a.children.filter(busyTree), finished = kids.length - busy.length
-    return `<section><div class="head" title="${esc(a.title)}">${esc(a.title)}</div><p>${line}</p>
+    return `<section><div class="head" title="${esc(a.title)}">${esc(a.title)}</div><p class="now">${now}</p>${line ? `<p>${line}</p>` : ''}
       ${active.length ? `<div class="cap">Assigned now</div><ul>${active.slice(0, 12).map(c => item(c, 0)).join('')}</ul>` : ''}
       ${finished && busy.length ? `<p>${finished} finished agent${finished > 1 ? 's are' : ' is'} hidden.</p>` : ''}
-      <p class="now">${now}</p></section>`
+      ${last ? `<div class="last"><span class="k">${LAST[last.kind] || 'Last'}</span><span class="t">${esc(last.text.replace(/^mcp__.*__(\w+)/, '$1').replace(/`|\*\*|^#+\s*/g, ''))}</span></div>` : ''}</section>`
   }
   function story(list) {
     const el = document.getElementById('story')
