@@ -213,7 +213,7 @@ function settle(n) {
   for (const c of n.children) settle(c)
   n.children.sort((x, y) => y.mtime - x.mtime)
   n.mtime = Math.max(n.mtime, ...n.children.map(c => c.mtime))
-  // Tokens as Ponytail counts them (all four kinds), and their price at API rates (null: unknown).
+  // Tokens of all four kinds, and their price at API rates (null: unknown).
   if (n.use) n.tokens = n.use.in + n.use.out + n.use.cr + n.use.cw
   else n.tokens = n.tokens || 0
   n.cost = n.use ? prices.cost(n.model, n.use, custom.loadConfig().prices) : null

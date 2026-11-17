@@ -17,7 +17,7 @@ async function openDashboard($: EngineInterface) {
 export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
-    // Other mods (Ponytail) share this slot: keep theirs under ours.
+    // Other mods share this slot: keep theirs under ours.
     const below = await next(e).catch(() => undefined)
     const { Box, Button } = $.ui.resolve(e)
     const mine = (

@@ -480,7 +480,7 @@ const Graph = (() => {
       ctx.save(); ctx.globalAlpha = 1; ctx.fillStyle = bgC; ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, 7); ctx.fill(); ctx.restore()
       ctx.fillStyle = color(n.k); ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, 7); ctx.fill()
       if (n === sel || n === hover) { ctx.strokeStyle = css('--text'); ctx.lineWidth = 1.5 / cam.k; ctx.beginPath(); ctx.arc(n.x, n.y, r + 1.5, 0, 7); ctx.stroke() }
-      // Like Obsidian: orchestrators always named, workers named when zoomed in or in focus.
+      // Orchestrators always named, workers named when zoomed in or in focus.
       const showLabel = n.depth === 0 || nodes.size <= 40 || n === hover || n === sel || cam.k > 1.6 || (dimAll && on && n.depth > 0 && (hover || sel))
       if (showLabel) {
         const fs = (n.depth === 0 ? 12.5 : 11) / Math.max(cam.k, .7)
@@ -506,7 +506,7 @@ const Graph = (() => {
     if ((r = m.match(/deepseek-?([\w.]*)/i))) return `DeepSeek ${r[1]}`.trim()
     return m && m !== 'gemini' ? m : toolName(a.tool)
   }
-  // A typed Claude subagent (gemini-hydrogen, sol-worker…) is named by its job; the model it runs on
+  // A typed Claude subagent (code-reviewer, Explore…) is named by its job; the model it runs on
   // is often just the relay (a Haiku handing work to agy or Codex), so it goes in brackets.
   const label = a => a.tool === 'claude' && a.kind !== 'session' && a.kind !== 'subagent' ? `${a.kind} (${who(a)})` : who(a)
   const STATE_EN = { working: 'working', idle: 'idle', done: 'done' }
@@ -543,7 +543,7 @@ const Graph = (() => {
     el.innerHTML = pick.map(tell).join('')
   }
 
-  // Tokens every agent here burned (input + output + cache reads and writes, as Ponytail counts them),
+  // Tokens every agent here burned (input + output + cache reads and writes),
   // hidden and finished ones included: All first, then each tool, the hungriest on top.
   // Dollars: what the tokens cost at each model's API price (the server prices them; null = no known price).
   // The card has its own range tabs; one session's view adds a first tab for that session alone.

@@ -1,16 +1,18 @@
 # HRless
 
-Adds an **HRless** button above the prompt box in Claude Code; the button opens the graph view of that session. Clicking it opens a local page (http://127.0.0.1:4777) that shows only that session's agent tree: the session at the top, the subagents it called below, and whatever those subagents called one level further down. If an agent ran `agy -p` or `codex exec`, the agy/Codex conversation it started appears under it too.
+A local dashboard for the AI agents running on your machine. HRless shows every Claude Code, Codex and agy (Antigravity CLI) agent, the subagents each one started, what they are doing now and how many tokens they have used.
+
+It adds an **HRless** button above the prompt box in Claude Code. The button opens http://127.0.0.1:4777 on that session's agent tree: the session on top, the subagents it called below it, and any agy or Codex conversation an agent started with `agy -p` or `codex exec`.
 
 ## Install
 
-In the prompt box of a Claude Code session, in a terminal:
+In a Claude Code session:
 
 ```
 /plugin install hrless --marketplace anilmai/HRless
 ```
 
-Answer `y` to `Add marketplace?`, then choose the scope (Enter, user scope).
+Answer `y` to `Add marketplace?`, then choose the scope (Enter for user scope).
 
 From a shell:
 
@@ -18,40 +20,53 @@ From a shell:
 claude plugin install hrless --marketplace anilmai/HRless
 ```
 
-In the desktop app (when `/plugin` does not work): next to the prompt box, click + > Plugins > Add marketplace and add `anilmai/HRless`, then Add plugin.
+In the desktop app: next to the prompt box, click **+ > Plugins > Add marketplace**, add `anilmai/HRless`, then **Add plugin**.
 
-Requires: Node.js 22.5 or newer on `PATH` (agy conversations are read with `node:sqlite`).
+Requires Node.js 22.5 or newer on `PATH` (agy conversations are read with `node:sqlite`).
 
 ## Views
 
-- **List:** each agent is a card with its status, last piece of work, project folder and model. Click a card to open its last prompt and the last 8 steps.
-- **Graph** (icon at the top right): each agent is a coloured ball, with the orchestrator on top and the agents it started in tiers below. The mini list on the right shows which colour belongs to which agent type. Drag to pan, scroll to zoom, click a ball to open its details. Only agents that are working are drawn below the orchestrator; when an agent finishes it leaves the graph (the list view still shows it).
-- **Story** (box on the left of the graph): tells the running work as sentences: who orchestrates, which agents it assigned, and who is waiting for whom.
-- **Tokens** (box under the story): tokens burned by every agent in view, finished and hidden ones included: an "All" total first, then each tool (Claude, Codex, agy, custom agents) with the largest on top. Counted like Ponytail: input + output + cache reads + cache writes, as each tool records them; agy's count is read from its own files and is close, not exact. Each row also shows what those tokens cost in US dollars at the model's API list price (`server/prices.js`; cache reads and writes priced separately). That is an API-price equivalent, not what a subscription bills. A model without a known price shows "no price"; add one in `~/.hrless/config.json`, for example `{ "prices": { "gemini-3.8-flash": { "in": 0.3, "out": 2.5 } } }` (USD per 1M tokens; a key matches any model id that contains it).
-- **This session · see all:** the page opened by the button shows only that session; this link switches to every session on the machine.
-- Agents nothing in HRless started (a script that ran agy forty times, for example) are grouped per tool into one ball once there are three or more of them.
+- **List:** one card per agent with its status, latest step, project folder and model. Click a card for its last prompt and last 8 steps.
+- **Graph:** each agent is a ball, with the orchestrator on top and the agents it started in tiers below. Only working agents are drawn under the orchestrator; finished ones stay in the list view. Drag to pan, scroll to zoom, click a ball for details.
+- **Story:** the current work in a few lines: the session, its status, the agents it assigned and its latest step.
+- **Tokens:** tokens used per tool (Claude, Codex, agy, custom agents), with tabs for 24 h, 7 d, 30 d, 90 d and all time. In a single-session view the first tab counts that session only. A session that worked within the range counts in full.
+- **This session · see all:** the page opened by the button shows one session; this link switches to every session on the machine.
+
+Agents not started by a tracked agent (a script that ran agy forty times, for example) are grouped per tool once there are three or more.
+
+### Token counts and cost
+
+Tokens are input + output + cache reads + cache writes, as each tool records them. agy's count is read from its own files and is close, not exact.
+
+Cost is shown in US dollars at each model's API list price (`server/prices.js`). It is an API-price equivalent, not what a subscription bills. To price a model HRless does not know, add it to `~/.hrless/config.json` (USD per 1M tokens; a key matches any model id that contains it):
+
+```json
+{ "prices": { "gemini-3.8-flash": { "in": 0.3, "out": 2.5 } } }
+```
 
 ## Custom agents
 
-Claude Code, Codex and agy are tracked on their own. Any other agent (DeepSeek, Aider, your own bot) adds itself: [HRLESS.md](HRLESS.md) tells an AI agent how to report its name, model and progress. The person icon in the toolbar shows a one-line instruction to paste into that agent's `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` or system prompt; there is nothing to fill in.
+Claude Code, Codex and agy are tracked automatically. Any other agent can report itself by following [HRLESS.md](HRLESS.md). The person icon in the toolbar gives a one-line instruction to paste into that agent's `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` or system prompt.
 
-An agent that reports the `command` it was started with (`deepseek`) hangs under the Claude agent whose Bash or PowerShell call ran that command. Reports go to `POST /api/report`, which accepts requests from this machine only, never from another website.
+Reports go to `POST /api/report`, which accepts requests from this machine only. An agent that reports the `command` it was started with appears under the Claude agent whose shell call ran that command.
 
-An agent that already saves its conversations as JSON or JSON Lines files can be read from them instead, through `~/.hrless/config.json` (`HRLESS_CONFIG` to use another path); HRLESS.md has the format. OpenAI-style (`prompt_tokens`/`completion_tokens`) and Anthropic-style (`input_tokens`/`output_tokens`) usage fields in those files are counted.
+An agent that already saves its conversations as JSON or JSON Lines can be read from those files instead, configured in `~/.hrless/config.json` (or the path in `HRLESS_CONFIG`). HRLESS.md has the format.
 
-## Where it reads from
+## Data sources
 
 | Tool | Files | Subagents |
 | --- | --- | --- |
-| Claude Code (CLI and desktop) | `~/.claude/projects/*/*.jsonl` | `<session>/subagents/agent-*.jsonl`, linked to the calling agent by `toolUseId` |
+| Claude Code (CLI and desktop) | `~/.claude/projects/*/*.jsonl` | `<session>/subagents/agent-*.jsonl`, linked by `toolUseId` |
 | Codex | `~/.codex/sessions/**/rollout-*.jsonl` | by `parent_thread_id` |
 | agy (Antigravity CLI) | `~/.gemini/antigravity-cli/conversations/*.db` | by `parent_references` |
 
-agy and Codex conversations attach to the Claude agent that owned the `agy`/`codex` Bash call running when they started (matched by time; if several calls run at once, one can occasionally land on the wrong branch).
+agy and Codex conversations attach to the Claude agent whose `agy` or `codex` shell call was running when they started. When several calls run at once, one can occasionally attach to the wrong agent.
 
-Status comes from the file's last write time: **working** within 90 seconds, **idle** within 30 minutes, and **done** when older. The page refreshes every 3 seconds. Nothing is sent anywhere: the server listens on `127.0.0.1` only and only reads files.
+Status comes from each file's last write: **working** within 90 seconds, **idle** within 30 minutes, **done** after that. The page refreshes every 3 seconds.
 
-The page loads no fonts or scripts from the internet. It uses Montserrat and Geist if they are installed, otherwise the system font.
+## Privacy
+
+HRless only reads files. The server listens on `127.0.0.1` and sends nothing anywhere. The page loads no fonts or scripts from the internet.
 
 ## Running it by hand
 
@@ -59,7 +74,7 @@ The page loads no fonts or scripts from the internet. It uses Montserrat and Gei
 node server/server.js --open
 ```
 
-The port changes with `HRLESS_PORT`. `CLAUDE_CONFIG_DIR` and `CODEX_HOME` are respected. After you change the server code, stop the running server, or the button will open the old one. The page (`index.html`) is read again on every request.
+Set `HRLESS_PORT` to change the port. `CLAUDE_CONFIG_DIR` and `CODEX_HOME` are respected. The page is reloaded on every request; after changing the server code, restart the server.
 
 ## License
 
