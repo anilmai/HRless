@@ -73,7 +73,8 @@ function claudeText(content) {
   return content.filter(b => b.type === 'text').map(b => b.text).join(' ')
 }
 // A shell call that runs one of `names` (agy, codex, or a custom agent's command): not `--version`/`--help`.
-const cliRe = names => new RegExp(`(^|[\\s;&|(])(${names.map(n => n.replace(/[.+]/g, '\\$&')).join('|')})(\\.exe|\\.cmd|\\.ps1)?(\\s+(?!--?(version|help)\\b)|$)`)
+// A path may lead to it (…\agy\bin\agy.exe) and a quote may close it ('…\agy.exe' -i …).
+const cliRe = names => new RegExp(`(^|[\\s;&|("'\\\\/])(${names.map(n => n.replace(/[.+]/g, '\\$&')).join('|')})(\\.exe|\\.cmd|\\.ps1)?["']?(\\s+(?!--?(version|help)\\b)|$)`)
 
 // Transcripts only grow, so each is read once and then only its new bytes (whole, not a tail:
 // the Agent and Bash calls that tie agents together can be anywhere in it).
@@ -126,8 +127,10 @@ function claudeRecord(d, r) {
       push({ kind: 'tool', text: toolLine(b.name, b.input) })
       if (b.name === 'Agent' || b.name === 'Task') d.agentCalls.add(b.id)
       const cmd = b.input?.command
-      if ((b.name === 'Bash' || b.name === 'PowerShell') && typeof cmd === 'string') {
-        const call = { cmd: cmd.slice(0, 2000), start: ts, end: 0 }
+      // Terminal-pane calls start agents too; they return at once while the agent keeps running.
+      const term = /^mcp__.*terminal__(run_in_terminal|open_terminal_tab)$/.test(b.name)
+      if ((b.name === 'Bash' || b.name === 'PowerShell' || term) && typeof cmd === 'string') {
+        const call = { cmd: cmd.slice(0, 2000), start: ts, end: 0, term }
         d.bash.push(call); d.open.set(b.id, call)
       }
     }
@@ -189,14 +192,17 @@ function adoptCli(trees, externals) {
     const key = x.cli.join('|'); if (!res.has(key)) res.set(key, cliRe(x.cli))
     const re = res.get(key)
     // The agent's own prompt quoted in the command line is the surest match.
-    const said = (x.prompt || '').slice(0, 40).trim()
+    const said = (x.ask || x.prompt || '').replace(/\s+/g, ' ').slice(0, 40).trim()
     let best = null, bestCall = null, gap = Infinity
     for (const [n, c] of calls) {
       if (used.has(c) || !re.test(c.cmd)) continue
       // A call with no result yet is open only as long as its caller is still writing.
-      const end = Math.max(c.end || n._d.mtime, c.start + 30000)
+      // A terminal call returns at once and its agent may open minutes later; the agent's own
+      // prompt quoted in the command still ties them within 10 minutes.
+      const quoted = said.length > 6 && c.cmd.replace(/\s+/g, ' ').includes(said)
+      const end = quoted ? c.start + 600000 : Math.max(c.term ? c.start + 180000 : c.end || n._d.mtime, c.start + 30000)
       if (x.start >= c.start - 3000 && x.start <= end + 3000) {
-        const g = said.length > 6 && c.cmd.includes(said) ? -1 : Math.abs(x.start - c.start)
+        const g = quoted ? -1 : Math.abs(x.start - c.start)
         if (g < gap) { best = n; bestCall = c; gap = g }
       }
     }
@@ -211,13 +217,13 @@ function adoptCli(trees, externals) {
 // mtime and "working" rise from the leaves, so a busy grandchild lights its whole branch.
 function settle(n) {
   for (const c of n.children) settle(c)
-  n.children.sort((x, y) => y.mtime - x.mtime)
+  n.children.sort((x, y) => (x.start || 0) - (y.start || 0)) // in the order they were started: a busy one does not jump
   n.mtime = Math.max(n.mtime, ...n.children.map(c => c.mtime))
   // Tokens of all four kinds, and their price at API rates (null: unknown).
   if (n.use) n.tokens = n.use.in + n.use.out + n.use.cr + n.use.cw
   else n.tokens = n.tokens || 0
   n.cost = n.use ? prices.cost(n.model, n.use, custom.loadConfig().prices) : null
-  delete n._d; delete n._call; delete n.start; delete n.cli; delete n._parent
+  delete n._d; delete n._call; delete n.cli; delete n._parent
   return n
 }
 
@@ -312,7 +318,7 @@ function collectCodex(since) {
     if (parent) parent.children.push(a); else roots.push(a)
   }
   for (const a of all.values()) {
-    a.children.sort((x, y) => y.mtime - x.mtime)
+    a.children.sort((x, y) => (x.start || 0) - (y.start || 0))
     a.mtime = Math.max(a.mtime, ...a.children.map(c => c.mtime))
     if (a.children.some(c => c.state === 'working')) a.state = 'working'
   }
@@ -402,6 +408,9 @@ function collectAgy(since) {
         const gens = db.prepare('select data from gen_metadata').all()
         a.use = sumUse(gens.map(g => genTokens(g.data)))
         if (gens.length) a.model = genModel(gens[gens.length - 1].data) || a.model
+        // The first prompt: a long conversation's last 40 steps no longer hold it.
+        const first = db.prepare('select step_payload from steps where step_type = 14 order by idx limit 1').get()
+        if (first) a.ask = (runs(first.step_payload).find(x => /\s/.test(x)) || '').replace(/^[^\w/(<]*(\/\w+\s+)?/, '').replace(/^<USER_REQUEST>\s*/, '')
         const steps = db.prepare('select idx, step_type, step_payload, metadata from steps order by idx desc limit 40').all().reverse()
         for (const s of steps) {
           const t = stepTime(s.metadata); if (t > (a.real || 0)) a.real = t
@@ -421,8 +430,13 @@ function collectAgy(since) {
         }
       } catch {} finally { try { db?.close() } catch {} }
     }
+    // Subagents this conversation created: agy writes them only to its own transcript log.
+    try {
+      const log = fs.readFileSync(path.join(AGY, 'brain', id, '.system_generated', 'logs', 'transcript.jsonl'), 'latin1')
+      a.subs = [...log.matchAll(/Created the following subagent:(?:\\n|\s)*\{(?:\\n|\s)*\\?"conversationId\\?":\s*\\?"([0-9a-f-]{36})/g)].map(m => m[1])
+    } catch {}
     if (h?.prompts.length) a.prompt = h.prompts[h.prompts.length - 1].text
-    a.title = clip(h?.prompts[0]?.text || a.first || a.prompt, 80) || id.slice(0, 8)
+    a.title = clip(h?.prompts[0]?.text || a.ask || a.first || a.prompt, 80) || id.slice(0, 8)
     a.prompt = clip(a.prompt, 400); a.events = a.events.slice(-8); delete a.first
     return a
     })
@@ -433,6 +447,7 @@ function collectAgy(since) {
     out.push({ ...b, mtime: t, children: [], state: state(t) })
   }
   const byId = new Map(out.map(a => [a.id, a])); const roots = []
+  for (const a of out) for (const s of a.subs || []) { const k = byId.get(s); if (k && !k.parent && k !== a && k.start >= a.start) k.parent = a.id } // a child starts after its parent: no loops
   for (const a of out) { const p = a.parent && byId.get(a.parent); if (p) p.children.push(a); else roots.push(a) }
   return roots
 }
@@ -466,7 +481,7 @@ function snapshot(hours, session) {
   })
   const left = adoptCli(trees, [...external, ...loose])
   const roots = session ? [byId.get(session)].filter(Boolean) : [...trees.map(t => t.root), ...left]
-  const agents = roots.map(settle).sort((x, y) => y.mtime - x.mtime)
+  const agents = roots.map(settle).sort((x, y) => (y.start || y.mtime) - (x.start || x.mtime)) // newest-started first, fixed
   return { now: Date.now(), hours, session: session || null, sources: custom.sources(), agents, limits: safe(limits) }
 }
 
