@@ -298,7 +298,8 @@ function collectCodex(since) {
       }
     }
     // The model is set once near the start, which a long thread's tail no longer holds.
-    if (!a.model) { const m = headText(file).match(/"thread_settings":\{"model":"([^"]+)"/); if (m) a.model = m[1] }
+    // Newer Codex writes it as "model":{"model":…} or under collaboration_mode, past the first 64 KB.
+    if (!a.model) { const m = headText(file, 512 * 1024).match(/"thread_settings":\{"model":"([^"]+)"|"model":\{"model":"([^"]+)"|"collaboration_mode":\{"mode":"[^"]*","model":"([^"]+)"/); if (m) a.model = m[1] || m[2] || m[3] }
     if (!a.title) a.title = clip(a.prompt, 80) || id.slice(0, 8)
     a.prompt = clip(a.prompt, 400); a.events = a.events.slice(-8)
     return a
@@ -356,6 +357,17 @@ function genTokens(buf) {
     return { in: n(1), out: n(2) + n(3), cr: n(5), cw: 0 }
   } catch { return null }
 }
+// The model a generation asked for (field 3.28, e.g. gemini-4-hydrogen-medium), else the one that served it (1.19).
+function genModel(buf) {
+  try {
+    const top = pbFields(Buffer.from(buf || []))
+    for (const [a, b] of [[3, 28], [1, 19]]) {
+      const m = top.get(a); const v = m && typeof m !== 'number' && pbFields(m).get(b)
+      if (v && typeof v !== 'number') { const id = Buffer.from(v).toString('utf8'); if (/^[\w.-]{3,80}$/.test(id)) return id }
+    }
+  } catch {}
+  return null
+}
 function agyHistory() {
   const map = new Map()
   for (const r of tailJson(path.join(AGY, 'history.jsonl'), 512 * 1024)) {
@@ -387,7 +399,9 @@ function collectAgy(since) {
         if (ws && !a.cwd) a.cwd = decodeURIComponent(ws[1])
         const parentRef = db.prepare('select data from parent_references limit 1').get()
         if (parentRef) { const m = runs(parentRef.data).join(' ').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/); if (m && m[0] !== id) a.parent = m[0] }
-        a.use = sumUse(db.prepare('select data from gen_metadata').all().map(g => genTokens(g.data)))
+        const gens = db.prepare('select data from gen_metadata').all()
+        a.use = sumUse(gens.map(g => genTokens(g.data)))
+        if (gens.length) a.model = genModel(gens[gens.length - 1].data) || a.model
         const steps = db.prepare('select idx, step_type, step_payload, metadata from steps order by idx desc limit 40').all().reverse()
         for (const s of steps) {
           const t = stepTime(s.metadata); if (t > (a.real || 0)) a.real = t
