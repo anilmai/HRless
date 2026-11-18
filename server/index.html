@@ -474,7 +474,8 @@ const Graph = (() => {
     for (const c of n.children) { place(c, cx, y + TIER); cx += c.w }
   }
   function layout() {
-    const order = [...roots].sort((a, b) => (b.kids > 0) - (a.kids > 0) || (b.a.start || b.a.mtime) - (a.a.start || a.a.mtime))
+    // The server's order (fixed, by start): grouping by "has workers" made a tree jump each time its last worker finished.
+    const order = roots
     order.forEach(width)
     const total = order.reduce((s, r) => s + r.w, 0)
     // Rows as wide as the screen's shape asks: wide on a monitor, two trees a row on a phone.

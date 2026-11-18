@@ -73,8 +73,18 @@ function claudeText(content) {
   return content.filter(b => b.type === 'text').map(b => b.text).join(' ')
 }
 // A shell call that runs one of `names` (agy, codex, or a custom agent's command): not `--version`/`--help`.
-// A path may lead to it (…\agy\bin\agy.exe) and a quote may close it ('…\agy.exe' -i …).
-const cliRe = names => new RegExp(`(^|[\\s;&|("'\\\\/])(${names.map(n => n.replace(/[.+]/g, '\\$&')).join('|')})(\\.exe|\\.cmd|\\.ps1)?["']?(\\s+(?!--?(version|help)\\b)|$)`)
+// A path may lead to it only when it names the program file (…\agy\bin\agy.exe), not a folder
+// called agy; a quote may close it ('…\agy.exe' -i …).
+const cliRe = names => {
+  const n = `(${names.map(n => n.replace(/[.+]/g, '\\$&')).join('|')})`
+  return new RegExp(`(?:(^|[\\s;&|("'])${n}|[\\\\/]${n}(?=\\.(?:exe|cmd|ps1)\\b))(\\.exe|\\.cmd|\\.ps1)?["']?(\\s+(?!--?(version|help)\\b)|$)`)
+}
+// How much of `said` (from its start) `cmd` holds: the longer, the surer the match.
+function quotedLength(cmd, said) {
+  let lo = 0, hi = said.length
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (cmd.includes(said.slice(0, m))) lo = m; else hi = m - 1 }
+  return lo
+}
 
 // Transcripts only grow, so each is read once and then only its new bytes (whole, not a tail:
 // the Agent and Bash calls that tie agents together can be anywhere in it).
@@ -130,7 +140,7 @@ function claudeRecord(d, r) {
       // Terminal-pane calls start agents too; they return at once while the agent keeps running.
       const term = /^mcp__.*terminal__(run_in_terminal|open_terminal_tab)$/.test(b.name)
       if ((b.name === 'Bash' || b.name === 'PowerShell' || term) && typeof cmd === 'string') {
-        const call = { cmd: cmd.slice(0, 2000), start: ts, end: 0, term }
+        const call = { cmd: cmd.slice(0, 2000), flat: cmd.slice(0, 2000).replace(/\s+/g, ' '), start: ts, end: 0, term }
         d.bash.push(call); d.open.set(b.id, call)
       }
     }
@@ -184,25 +194,28 @@ function adoptCli(trees, externals) {
   for (const t of trees) for (const n of t.all) for (const c of n._d.bash) calls.push([n, c])
   const res = new Map()
   const left = []
-  // One call starts one agent: once a call has adopted an agent it is taken, so twenty agents
-  // started in the same second land under their twenty callers, not all under the first.
+  // A call that has adopted an agent yields to a free one, so twenty agents started in the same
+  // second land under their twenty callers, not all under the first; it is still taken when no
+  // free call fits, as a single call that starts agents in a loop (`for id in …; do agy -p … & done`).
   const used = new Set()
   for (const x of [...externals].sort((a, b) => a.start - b.start)) {
     if (!x.cli?.length) { left.push(x); continue }
     const key = x.cli.join('|'); if (!res.has(key)) res.set(key, cliRe(x.cli))
     const re = res.get(key)
     // The agent's own prompt quoted in the command line is the surest match.
-    const said = (x.ask || x.prompt || '').replace(/\s+/g, ' ').slice(0, 40).trim()
+    // Up to 300 characters: briefs often share their first sentence and differ only in the section they name.
+    const said = (x.ask || x.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 300)
     let best = null, bestCall = null, gap = Infinity
     for (const [n, c] of calls) {
-      if (used.has(c) || !re.test(c.cmd)) continue
+      if (!re.test(c.cmd)) continue
       // A call with no result yet is open only as long as its caller is still writing.
       // A terminal call returns at once and its agent may open minutes later; the agent's own
-      // prompt quoted in the command still ties them within 10 minutes.
-      const quoted = said.length > 6 && c.cmd.replace(/\s+/g, ' ').includes(said)
+      // prompt quoted in the command still ties them within 10 minutes, the longest quote winning.
+      const k = said.length > 6 ? quotedLength(c.flat || c.cmd, said) : 0
+      const quoted = k > 6 && k >= Math.min(40, said.length)
       const end = quoted ? c.start + 600000 : Math.max(c.term ? c.start + 180000 : c.end || n._d.mtime, c.start + 30000)
       if (x.start >= c.start - 3000 && x.start <= end + 3000) {
-        const g = quoted ? -1 : Math.abs(x.start - c.start)
+        const g = (quoted ? -k : Math.abs(x.start - c.start)) + (used.has(c) ? 1e12 : 0)
         if (g < gap) { best = n; bestCall = c; gap = g }
       }
     }
@@ -383,18 +396,36 @@ function agyHistory() {
   }
   return map
 }
-function collectAgy(since) {
-  const out = []
-  const dir = path.join(AGY, 'conversations')
-  const hist = agyHistory()
-  for (const f of ls(dir)) {
-    if (!f.endsWith('.db')) continue
-    const id = f.slice(0, -3)
-    const mtime = Math.max(...[f, f + '-wal'].map(x => stat(path.join(dir, x))?.mtimeMs || 0))
-    if (mtime < since) continue
-    const h = hist.get(id)
-    const size = [f, f + '-wal'].map(x => stat(path.join(dir, x))?.size || 0).join('+') // see lastWrite
-    const b = memo(path.join(dir, f), mtime + ':' + size + ':' + (h?.prompts.length || 0), () => {
+// The typed prompt in a user step: the first readable run with a space (the long ones after it are injected
+// instructions). The run starts with a protobuf length byte that may read as a character, then a mode command (`/plan`).
+const agyPrompt = payload => (runs(payload).find(x => /\s/.test(x)) || '').replace(/^[^\w/(<]*(\/\w+\s+)?/, '').replace(/^<USER_REQUEST>\s*/, '')
+// Subagents a conversation created: agy writes them only to its own transcript log, read here in the
+// bytes added since the last poll (a parent's log can be many MB and grows while it waits on a child).
+const SUB_RE = /Created the following subagent:(?:\\n|\s)*\{(?:\\n|\s)*\\?"conversationId\\?":\s*\\?"([0-9a-f-]{36})/g
+const subLogs = new Map()
+function agySubs(id) {
+  const file = path.join(AGY, 'brain', id, '.system_generated', 'logs', 'transcript.jsonl')
+  const st = stat(file); if (!st) return []
+  let c = subLogs.get(file)
+  if (!c || st.size < c.pos) { c = { pos: 0, rest: '', subs: [], mtime: 0 }; subLogs.set(file, c) }
+  c.mtime = st.mtimeMs
+  if (st.size > c.pos) {
+    const fd = fs.openSync(file, 'r')
+    try {
+      const buf = Buffer.alloc(st.size - c.pos); fs.readSync(fd, buf, 0, buf.length, c.pos)
+      const text = c.rest + buf.toString('latin1'), cut = text.lastIndexOf('\n') + 1
+      for (const m of text.slice(0, cut).matchAll(SUB_RE)) c.subs.push(m[1])
+      c.rest = text.slice(cut); c.pos = st.size
+    } finally { fs.closeSync(fd) }
+  }
+  return c.subs
+}
+function agyNode(dir, f, hist) {
+  const id = f.slice(0, -3)
+  const mtime = Math.max(...[f, f + '-wal'].map(x => stat(path.join(dir, x))?.mtimeMs || 0))
+  const h = hist.get(id)
+  const size = [f, f + '-wal'].map(x => stat(path.join(dir, x))?.size || 0).join('+') // see lastWrite
+  const b = memo(path.join(dir, f), mtime + ':' + size + ':' + (h?.prompts.length || 0), () => {
     const a = { cli: ['agy'], start: stat(path.join(dir, f))?.birthtimeMs || mtime, id, tool: 'agy', kind: 'conversation', title: '', cwd: h?.workspace || '', model: 'gemini', prompt: '', events: [], mtime, children: [], parent: null }
     if (sqlite) {
       let db
@@ -410,14 +441,12 @@ function collectAgy(since) {
         if (gens.length) a.model = genModel(gens[gens.length - 1].data) || a.model
         // The first prompt: a long conversation's last 40 steps no longer hold it.
         const first = db.prepare('select step_payload from steps where step_type = 14 order by idx limit 1').get()
-        if (first) a.ask = (runs(first.step_payload).find(x => /\s/.test(x)) || '').replace(/^[^\w/(<]*(\/\w+\s+)?/, '').replace(/^<USER_REQUEST>\s*/, '')
+        if (first) a.ask = agyPrompt(first.step_payload)
         const steps = db.prepare('select idx, step_type, step_payload, metadata from steps order by idx desc limit 40').all().reverse()
         for (const s of steps) {
           const t = stepTime(s.metadata); if (t > (a.real || 0)) a.real = t
           const r = runs(s.step_payload)
-          // The typed prompt is the first readable run with a space; the long ones after it are injected instructions.
-          // The run starts with a protobuf length byte that may read as a character, then a mode command (`/plan`).
-          if (s.step_type === 14) { const t = (r.find(x => /\s/.test(x)) || '').replace(/^[^\w/(]*(\/\w+\s+)?/, ''); if (t) { if (!a.first) a.first = t; a.prompt = t; a.events.push({ kind: 'prompt', text: clip(t) }) } }
+          if (s.step_type === 14) { const t = agyPrompt(s.step_payload); if (t) { if (!a.first) a.first = t; a.prompt = t; a.events.push({ kind: 'prompt', text: clip(t) }) } }
           else if (s.step_type === 132) {
             const i = r.findIndex(x => /^call_\d+/.test(x)); const name = i >= 0 ? r[i + 1] : 'tool'
             const args = (r.find(x => x.includes('{"')) || '').replace(/^[^{]*/, '')
@@ -430,24 +459,45 @@ function collectAgy(since) {
         }
       } catch {} finally { try { db?.close() } catch {} }
     }
-    // Subagents this conversation created: agy writes them only to its own transcript log.
-    try {
-      const log = fs.readFileSync(path.join(AGY, 'brain', id, '.system_generated', 'logs', 'transcript.jsonl'), 'latin1')
-      a.subs = [...log.matchAll(/Created the following subagent:(?:\\n|\s)*\{(?:\\n|\s)*\\?"conversationId\\?":\s*\\?"([0-9a-f-]{36})/g)].map(m => m[1])
-    } catch {}
     if (h?.prompts.length) a.prompt = h.prompts[h.prompts.length - 1].text
     a.title = clip(h?.prompts[0]?.text || a.ask || a.first || a.prompt, 80) || id.slice(0, 8)
     a.prompt = clip(a.prompt, 400); a.events = a.events.slice(-8); delete a.first
     return a
-    })
-    // agy rewrites every conversation file when it starts, so a file's time says nothing:
-    // the last step's own time does (or, for one with no step yet, when it was created).
-    const t = b.real || b.start || mtime
-    if (t < since) continue
-    out.push({ ...b, mtime: t, children: [], state: state(t) })
+  })
+  // agy rewrites every conversation file when it starts, so a file's time says nothing:
+  // the last step's own time does (or, for one with no step yet, when it was created).
+  const t = b.real || b.start || mtime
+  return { ...b, mtime: t, children: [], state: state(t) }
+}
+function collectAgy(since) {
+  const dir = path.join(AGY, 'conversations')
+  const hist = agyHistory()
+  const files = ls(dir).filter(f => f.endsWith('.db'))
+  const out = []
+  for (const f of files) {
+    if (Math.max(...[f, f + '-wal'].map(x => stat(path.join(dir, x))?.mtimeMs || 0)) < since) continue
+    const a = agyNode(dir, f, hist)
+    if (a.mtime >= since) out.push(a)
   }
-  const byId = new Map(out.map(a => [a.id, a])); const roots = []
-  for (const a of out) for (const s of a.subs || []) { const k = byId.get(s); if (k && !k.parent && k !== a && k.start >= a.start) k.parent = a.id } // a child starts after its parent: no loops
+  const byId = new Map(out.map(a => [a.id, a]))
+  // A child starts after its parent: no loops.
+  const adopt = (a, s) => { const k = byId.get(s); if (k && !k.parent && k !== a && k.start >= a.start) k.parent = a.id }
+  for (const a of out) for (const s of agySubs(a.id)) adopt(a, s)
+  // A working child whose parent went quiet before the window: find that parent among the logs
+  // written since the child started, and show it too.
+  const orphans = out.filter(a => !a.parent)
+  if (orphans.length) {
+    const from = Math.min(...orphans.map(a => a.start)), want = new Set(orphans.map(a => a.id))
+    for (const f of files) {
+      const id = f.slice(0, -3); if (byId.has(id)) continue
+      const log = stat(path.join(AGY, 'brain', id, '.system_generated', 'logs', 'transcript.jsonl'))
+      if (!log || log.mtimeMs < from) continue
+      const subs = agySubs(id).filter(s => want.has(s)); if (!subs.length) continue
+      const p = agyNode(dir, f, hist); byId.set(id, p); out.push(p)
+      for (const s of subs) adopt(p, s)
+    }
+  }
+  const roots = []
   for (const a of out) { const p = a.parent && byId.get(a.parent); if (p) p.children.push(a); else roots.push(a) }
   return roots
 }
@@ -481,7 +531,10 @@ function snapshot(hours, session) {
   })
   const left = adoptCli(trees, [...external, ...loose])
   const roots = session ? [byId.get(session)].filter(Boolean) : [...trees.map(t => t.root), ...left]
-  const agents = roots.map(settle).sort((x, y) => (y.start || y.mtime) - (x.start || x.mtime)) // newest-started first, fixed
+  // Fixed order, newest-started first; a tree that has gone quiet for good (done all through) sinks below
+  // the live ones, so working sessions stay on top without jumping each time one of them answers.
+  const live = n => n.state !== 'done' || n.children.some(live)
+  const agents = roots.map(settle).sort((x, y) => live(y) - live(x) || (y.start || y.mtime) - (x.start || x.mtime))
   return { now: Date.now(), hours, session: session || null, sources: custom.sources(), agents, limits: safe(limits) }
 }
 
